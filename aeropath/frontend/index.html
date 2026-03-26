@@ -346,6 +346,16 @@
         if(currentMode === 'bike') timeMin = Math.round(timeMin * 0.8);
         if(currentMode === 'bus') timeMin = Math.round(timeMin * 1.4);
 
+        // Save route to localStorage for the dashboard to use
+        localStorage.setItem('route_dest_name', dest.display_name || destStr);
+        localStorage.setItem('route_dest_lat', parseFloat(dest.lat).toFixed(5));
+        localStorage.setItem('route_dest_lng', parseFloat(dest.lon).toFixed(5));
+        localStorage.setItem('route_origin_name', originEl.value);
+        localStorage.setItem('route_dist_km', distKm);
+        localStorage.setItem('route_time_min', timeMin);
+        localStorage.setItem('route_time_saved', Math.round(timeMin * 0.25) + 3);
+        localStorage.setItem('route_mode', currentMode);
+
         // Populate Route A (Optimal)
         document.getElementById("route-results-area").style.display = "block";
         document.getElementById("route-a-dist").textContent = distKm + " km";
