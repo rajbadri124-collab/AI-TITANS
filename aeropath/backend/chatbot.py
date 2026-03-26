@@ -52,7 +52,7 @@ def match_junction(text):
             return jid
     return None
 
-def get_chatbot_response(user_input, junction_states, weather_data, last_ambulance, traffic_intel_data, JUNCTIONS):
+def get_chatbot_response(user_input, junction_states, weather_data, last_ambulance, traffic_intel_data, JUNCTIONS, forecast_cache):
     """Generate a smart chatbot response based on user input and live context."""
     msg = user_input.lower().strip()
     hour = datetime.datetime.now().hour
@@ -73,8 +73,15 @@ def get_chatbot_response(user_input, junction_states, weather_data, last_ambulan
     j_state = junction_states.get(jid, {"level": "LOW", "confidence": 0.5})
     j_weather = weather_data.get(jid, {})
     j_intel = traffic_intel_data.get(jid, {})
+    j_forecast = forecast_cache.get(jid, [])
     
-    # ... (existing data setup) ...
+    # Reach-time analysis (forecast)
+    reach_text = ""
+    if j_forecast:
+        lvl_30 = j_forecast[1]["level"] if len(j_forecast) > 1 else "Unknown"
+        if lvl_30 == "HIGH":
+            reach_text = f"WARNING: Traffic at {j_name} is predicted to spike to HIGH in 30 minutes. "
+
     condition = j_weather.get("condition", "Sunny")
     icon = j_weather.get("icon", "☀️")
     temp = j_weather.get("temperature_c", 28)
@@ -83,30 +90,28 @@ def get_chatbot_response(user_input, junction_states, weather_data, last_ambulan
     level = j_state.get("level", "LOW")
     
     # Mode specific advice
-    mode_notes = {
-        "bike": "Helmet is mandatory. Watch out for potholes.",
-        "car": "Seatbelts on. Ideal for current weather.",
-        "bus": "Check BMTC/Local schedules. Expect stops."
-    }
-
-    if "cafe" in msg or "coffee" in msg:
-        loc = ctx_dest or j_name
-        return {"reply": f"☕ There are several popular cafes near {loc}. I'd recommend 'Blue Tokai' or 'Third Wave' for a quick {ctx_mode} stop.", "type":"suggestion"}
-
-    if "safe" in msg:
-        return {"reply": f"🛡️ Safety Check: Travel via {ctx_mode} to {ctx_dest or j_name} looks good. {mode_notes.get(ctx_mode, '')}", "type":"safety"}
+    best_mode = "Car"
+    is_rush = hour in [8, 9, 17, 18, 19]
+    if is_rush or level in ["MEDIUM", "HIGH"]:
+        best_mode = "Metro (Purple/Green Line)" if "Bengaluru" in j_name or jid in ["J1","J2","J3"] else "Bike/Rapid"
+    if condition == "Rainy":
+        best_mode = "Metro or Cab"
 
     # --- Live xAI / Grok Integration ---
     xai_key = os.environ.get("XAI_API_KEY")
     if xai_key:
-        system_prompt = f"""You are AeroPath AI, a concise and highly intelligent Urban Traffic & Routing Advisor.
+        system_prompt = f"""You are AeroPath AI, a proactive and creative Urban Mobility Expert.
 Context:
-User is traveling to: {ctx_dest or 'an unknown destination'} via {ctx_mode}.
-Current Hour: {hour}:00.
-Destination/Node ({j_name}): Traffic Level is {level}. Weather is {condition} ({temp}C) with {advice}.
-Ambulance AMB-01 Status: {'ACTIVE' if last_ambulance.get("active") else 'Standby'} at {last_ambulance.get('lat')}, {last_ambulance.get('lng')}.
+- User Destination: {ctx_dest or 'Unknown'} (Mode: {ctx_mode})
+- Current Junction ({j_name}): Status={level}, Weather={condition} ({temp}C).
+- Forecast: {reach_text or 'Stable for next 60m'}.
+- Recommended Mode: {best_mode}.
+- Ambulance AMB-01: {'ACTIVE' if last_ambulance.get("active") else 'Standby'}
 
-Answer the user's query intelligently based on this real-time data. Be extremely concise (1-3 sentences max). Recommend the best transport mode based on weather and traffic. Format your response cleanly."""
+Task: 
+1. If the user is in a 'Car' during peak/rain, suggest 'Metro' or 'Rapid' to save time.
+2. Warn the user if traffic will be bad when they arrive (Reach-Time Analysis).
+3. Be proactive and helpful. Keep it to 2-3 sentences max. Use <b>tags for emphasis."""
         
         try:
             resp = requests.post(
@@ -124,28 +129,17 @@ Answer the user's query intelligently based on this real-time data. Be extremely
             if resp.status_code == 200:
                 data = resp.json()
                 reply = data["choices"][0]["message"]["content"]
-                reply = reply.replace("**", "<b>").replace("\n", "<br>") # Format for HTML presentation
+                reply = reply.replace("**", "<b>").replace("\n", "<br>")
                 return {"reply": f"🤖 <b>AeroPath AI:</b><br>{reply}", "type": "llm"}
-            else:
-                print("xAI HTTP Error:", resp.status_code, resp.text)
         except Exception as e:
             print("xAI Request Failed:", e)
-    # -----------------------------------
 
-    # Intelligent Route & Context Synthesis
+    # Fallback/Rule-based Intelligence
     if any(w in msg for w in ["route", "short", "best", "traffic", "peak", "time", "suggest"]):
-        is_rush = "Yes" if hour in [8, 9, 17, 18, 19] else "No"
-        peak_text = "It is currently <b>PEAK RUSH HOUR</b>." if is_rush == "Yes" else "Traffic is currently flowing normally."
+        peak_text = "It is currently <b>PEAK RUSH HOUR</b>." if is_rush else "Traffic is currently flowing normally."
+        rec_text = f"I suggest switching to <b>{best_mode}</b> to bypass the current {level} congestion." if best_mode.lower() != ctx_mode.lower() else f"Your {ctx_mode} is optimized for these conditions."
         
-        weather_text = f"The weather is {condition} ({temp}°C)."
-        if condition == "Rainy": weather_text += " Roads may be slippery."
-        
-        best_mode = "Metro" if is_rush == "Yes" else "Car"
-        if condition == "Sunny" and is_rush == "No": best_mode = "Bike"
-        
-        rec_text = f"Given these conditions, I highly recommend using a <b>{best_mode}</b> instead of a {ctx_mode}." if best_mode.lower() != ctx_mode.lower() else f"Using a {ctx_mode} is a great choice for these conditions."
-        
-        return {"reply": f"{peak_text} {weather_text}<br><br>I have mapped the shortest route to {ctx_dest or 'your destination'} avoiding Level 4 congestion. {rec_text}", "type": "route_intel"}
+        return {"reply": f"{reach_text}{peak_text} {icon} {condition} detected.<br><br>{rec_text}", "type": "route_intel"}
 
     # Determine intent (existing fallbacks)
     if any(w in msg for w in ["weather", "rain", "sun", "fog"]):

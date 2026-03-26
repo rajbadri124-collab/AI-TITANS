@@ -84,6 +84,12 @@
         </div>
 
         <button class="btn-primary" id="btn-route" style="margin-top:16px;" onclick="planRouteGlobal()">🗺 Find Shorter Route</button>
+
+        <!-- AI SMART TIP -->
+        <div id="ai-smart-tip" class="panel" style="display:none;margin-top:15px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);padding:12px;border-radius:12px;animation:slideIn 0.3s forwards;">
+          <div style="font-size:10px;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;"><i class="fa-solid fa-wand-magic-sparkles"></i> AI Smart Suggestion</div>
+          <div id="ai-tip-text" style="font-size:12px;color:rgba(255,255,255,0.85);line-height:1.4;">Analyzing real-time traffic...</div>
+        </div>
       </div>
 
       <!-- ROUTE RESULTS -->
@@ -378,6 +384,8 @@
         
         // Ensure Route A is visually selected initially
         selectRoute(0);
+        window.alreadyReRouted = false;
+        startRouteGuard(); // Start monitoring the new route
       });
     }
 
@@ -427,6 +435,47 @@
     setLang('en');
 
     function logout() { localStorage.clear(); window.location.href='login.html'; }
+
+    // --- PHASE 13: DYNAMIC RE-ROUTING (ROUTE GUARD) ---
+    function startRouteGuard() {
+      if(window.routeGuardInterval) clearInterval(window.routeGuardInterval);
+      window.routeGuardInterval = setInterval(async () => {
+        const destStr = document.getElementById("route-dest-search").value;
+        if(!destStr) return;
+
+        try {
+          const res = await fetch(API + "/api/dashboard/data").then(r=>r.json());
+          if(!res.junctions) return;
+
+          // Find if any junction near destination or on route is HIGH
+          // For hackathon, we match the destination string to known junctions
+          const highJunction = res.junctions.find(j => 
+            j.congestion === 'HIGH' && 
+            (destStr.toLowerCase().includes(j.name.toLowerCase()) || Math.random() < 0.05) // Sim random logic for demo
+          );
+
+          if(highJunction && !window.alreadyReRouted) {
+            console.log("DYNAMIC RE-ROUTE: High congestion detected at " + highJunction.name);
+            triggerTrafficSpike();
+            window.alreadyReRouted = true;
+            
+            // Show AI Tip
+            const tipEl = document.getElementById("ai-smart-tip");
+            const tipText = document.getElementById("ai-tip-text");
+            tipEl.style.display = "block";
+            tipText.innerHTML = `⚠️ <b>Traffic Spike at ${highJunction.name}</b>. AeroPath has automatically shifted your navigation to an alternate corridor.`;
+          }
+
+          // Transportation Logic - Suggestions based on time/mode
+          const hour = new Date().getHours();
+          const isPeak = (hour >= 8 && hour < 11) || (hour >= 17 && hour < 20);
+          if(isPeak && currentMode === 'car') {
+            document.getElementById("ai-smart-tip").style.display = "block";
+            document.getElementById("ai-tip-text").innerHTML = `<i class="fa-solid fa-train-subway"></i> <b>Peak Hour Detected</b>. Taking the <b>Metro</b> would save you ~15 mins compared to driving right now.`;
+          }
+        } catch(e) { console.error("RouteGuard Error:", e); }
+      }, 15000);
+    }
 
     // --- CHATBOT ENHANCEMENT ---
     async function chat(presetMsg) {

@@ -155,7 +155,7 @@ def ambulance_gps_live():
 @app.route("/api/chat", methods=["POST"])
 def chat():
     msg = request.get_json().get("message", "")
-    return jsonify(get_chatbot_response(msg, junction_states, weather_cache, last_ambulance_position, traffic_intel_cache, JUNCTIONS))
+    return jsonify(get_chatbot_response(msg, junction_states, weather_cache, last_ambulance_position, traffic_intel_cache, JUNCTIONS, forecast_cache))
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
