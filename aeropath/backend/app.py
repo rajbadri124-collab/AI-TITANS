@@ -62,7 +62,7 @@ def root():
 
 @app.route("/dashboard")
 def dashboard():
-    return send_from_directory("../frontend", "index.html")
+    return send_from_directory("../frontend", "dashboard.html")
 
 @app.route("/<path:filename>")
 def static_files(filename):

@@ -91,6 +91,21 @@ def get_chatbot_response(user_input, junction_states, weather_data, last_ambulan
     if "safe" in msg:
         return {"reply": f"🛡️ Safety Check: Travel via {ctx_mode} to {ctx_dest or j_name} looks good. {mode_notes.get(ctx_mode, '')}", "type":"safety"}
 
+    # Intelligent Route & Context Synthesis
+    if any(w in msg for w in ["route", "short", "best", "traffic", "peak", "time", "suggest"]):
+        is_rush = "Yes" if hour in [8, 9, 17, 18, 19] else "No"
+        peak_text = "It is currently <b>PEAK RUSH HOUR</b>." if is_rush == "Yes" else "Traffic is currently flowing normally."
+        
+        weather_text = f"The weather is {condition} ({temp}°C)."
+        if condition == "Rainy": weather_text += " Roads may be slippery."
+        
+        best_mode = "Metro" if is_rush == "Yes" else "Car"
+        if condition == "Sunny" and is_rush == "No": best_mode = "Bike"
+        
+        rec_text = f"Given these conditions, I highly recommend using a <b>{best_mode}</b> instead of a {ctx_mode}." if best_mode.lower() != ctx_mode.lower() else f"Using a {ctx_mode} is a great choice for these conditions."
+        
+        return {"reply": f"{peak_text} {weather_text}<br><br>I have mapped the shortest route to {ctx_dest or 'your destination'} avoiding Level 4 congestion. {rec_text}", "type": "route_intel"}
+
     # Determine intent (existing fallbacks)
     if any(w in msg for w in ["weather", "rain", "sun", "fog"]):
         return {"reply": f"{icon} {j_name}: {condition}, {temp}°C.\n💡 {advice}", "type": "weather"}
