@@ -40,13 +40,14 @@
     <div class="sidebar">
 
       <!-- SMART ROUTE SEARCH -->
-      <div class="panel route-search-panel">
-        <h3 style="margin-bottom:12px;color:var(--accent-blue);">🛰 Smart Pathfinding</h3>
+      <div class="panel map-overlay-panel left-panel">
+        <h2 style="font-weight: 800; letter-spacing: 1px;">AeroPath <span style="color:var(--accent-blue)">AI</span></h2>
         
         <div class="input-group">
-          <label>From (Auto-detected)</label>
-          <div style="display:flex;gap:8px;">
-            <input type="text" id="route-origin-str" class="input-modern" placeholder="Detecting location..." list="junction-options">
+          <label id="lbl-from">From</label>
+          <div style="display:flex;gap:5px;">
+            <input type="text" id="route-origin-str" class="input-modern" placeholder="Starting location..." style="flex:1;">
+            <button onclick="startOriginDictation()" id="btn-origin-mic" style="background:transparent;border:1px solid rgba(255,255,255,0.1);color:#8b949e;border-radius:8px;padding:6px 12px;cursor:pointer;transition:0.3s;" title="Voice Input"><i class="fa-solid fa-microphone"></i></button>
             <button class="btn-icon" title="Refresh Location" onclick="detectLocation()">🔄</button>
           </div>
           <input type="hidden" id="route-origin-id">
@@ -550,6 +551,41 @@
           micBtn.style.color = "#8b949e";
           micBtn.style.borderColor = "rgba(255,255,255,0.1)";
           fetchSuggestions(e.results[0][0].transcript); // Auto-fetch suggestions
+        };
+
+        recognition.onerror = function(e) {
+          recognition.stop();
+          micBtn.style.color = "#8b949e";
+          micBtn.style.borderColor = "rgba(255,255,255,0.1)";
+        }
+      } else {
+        alert("Voice recognition is not supported in this browser.");
+      }
+    }
+
+    function startOriginDictation() {
+      if (window.hasOwnProperty('webkitSpeechRecognition')) {
+        const recognition = new webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = currentLang === 'hi' ? "hi-IN" : (currentLang === 'kn' ? "kn-IN" : "en-US");
+        
+        const micBtn = document.getElementById('btn-origin-mic');
+        micBtn.style.color = "#ef4444";
+        micBtn.style.borderColor = "#ef4444";
+        
+        recognition.start();
+
+        recognition.onresult = function(e) {
+          const originEl = document.getElementById('route-origin-str');
+          originEl.value = e.results[0][0].transcript;
+          // Clear geocoded dataset so it forces a re-geocode on the new natural string
+          delete originEl.dataset.lat;
+          delete originEl.dataset.lng;
+          
+          recognition.stop();
+          micBtn.style.color = "#8b949e";
+          micBtn.style.borderColor = "rgba(255,255,255,0.1)";
         };
 
         recognition.onerror = function(e) {
