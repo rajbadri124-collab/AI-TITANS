@@ -41,57 +41,83 @@ TRANSPORT_SUGGESTIONS = {
 
 _cache = {}
 
+
+# Junction lat/lng — must match JUNCTIONS in green_wave.py
+JUNCTION_COORDS = {
+    "J1": (12.9716, 77.5946),   # MG Road
+    "J2": (12.9352, 77.6245),   # Koramangala
+    "J3": (12.9784, 77.6408),   # Indiranagar
+    "J4": (12.9921, 77.5559),   # Rajajinagar
+    "J5": (12.9116, 77.6395),   # HSR Layout
+}
+
+# WMO weather code → (condition, emoji)
+WMO_MAP = {
+    0:  ("Clear Sky",     "☀️"),
+    1:  ("Partly Cloudy", "🌤"),
+    2:  ("Partly Cloudy", "⛅"),
+    3:  ("Overcast",      "☁️"),
+    45: ("Foggy",         "🌫"),
+    48: ("Foggy",         "🌫"),
+    51: ("Drizzle",       "🌦"),
+    53: ("Drizzle",       "🌦"),
+    55: ("Drizzle",       "🌦"),
+    61: ("Rainy",         "🌧"),
+    63: ("Rainy",         "🌧"),
+    65: ("Heavy Rain",    "🌧"),
+    71: ("Snowy",         "❄️"),
+    80: ("Showers",       "🌦"),
+    81: ("Showers",       "🌦"),
+    95: ("Thunderstorm",  "⛈"),
+}
+
 def simulate_weather(junction_id):
     """
-    FETCHER: Uses wttr.in to get real-time weather for Bangalore.
-    Uses junction_id to manage per-node variation (simulated from real base).
+    Fetches real-time weather from Open-Meteo using each junction's actual coordinates.
     """
+    lat, lng = JUNCTION_COORDS.get(junction_id, (12.9716, 77.5946))
+    hour = datetime.datetime.now().hour
+
     try:
-        # Fetch real-time weather for Bangalore
-        res = requests.get("https://wttr.in/Bangalore?format=j1", timeout=5)
-        data = res.json()["current_condition"][0]
-        
-        real_temp = int(data["temp_C"])
-        real_hum = int(data["humidity"])
-        desc = data["weatherDesc"][0]["value"].lower()
-        
-        # Map wttr description to our internal types
-        condition = "Sunny"
-        for key, val in WEATHER_MAP.items():
-            if key in desc:
-                condition = val
-                break
-        
-        # Add slight variation per junction for visual realism
-        j_var = hash(junction_id) % 3 - 1 # -1, 0, or 1
-        temp = real_temp + j_var
-        
-        impact = WEATHER_IMPACT.get(condition, WEATHER_IMPACT["Sunny"])
-        
-        # NIGHT TIME CHECK
-        icon = WEATHER_ICONS.get(condition, "🌤️")
-        hour = datetime.datetime.now().hour
-        if (hour >= 18 or hour < 6):
-            if condition in ["Sunny", "Clear", "Partly Cloudy"]:
-                icon = "🌙"
-            elif condition == "Rainy":
-                icon = "🌧️" # Keep rain but maybe a darker one if we had it
-        
+        url = (
+            f"https://api.open-meteo.com/v1/forecast"
+            f"?latitude={lat}&longitude={lng}"
+            f"&current_weather=true"
+            f"&hourly=relative_humidity_2m"
+            f"&wind_speed_unit=kmh"
+            f"&timezone=Asia%2FKolkata"
+        )
+        res = requests.get(url, timeout=6)
+        data = res.json()
+        cw = data["current_weather"]
+        code = int(cw.get("weathercode", 0))
+        temp = round(cw.get("temperature", 28))
+        wind = round(cw.get("windspeed", 10))
+        hum  = data.get("hourly", {}).get("relative_humidity_2m", [65])[hour]
+
+        condition, icon = WMO_MAP.get(code, WMO_MAP.get((code // 10) * 10, ("Partly Cloudy", "⛅")))
+
+        # Night icon override — after 6 PM or before 6 AM, use moon for clear skies
+        if (hour >= 18 or hour < 6) and condition in ("Clear Sky", "Partly Cloudy"):
+            icon = "🌙"
+
+        impact = WEATHER_IMPACT.get(condition, WEATHER_IMPACT.get("Partly Cloudy", {"delay_multiplier": 1.0, "advice": "Normal conditions."}))
+
         return {
             "condition": condition,
             "icon": icon,
             "temperature_c": temp,
-            "humidity_pct": real_hum,
+            "wind_kmh": wind,
+            "humidity_pct": hum,
             "delay_multiplier": impact["delay_multiplier"],
             "advice": impact["advice"],
             "transport_suggestions": TRANSPORT_SUGGESTIONS.get(condition, ["Car", "Bus"]),
-            "source": "REAL-TIME (wttr.in)"
+            "source": f"REAL-TIME (Open-Meteo @ {lat},{lng})"
         }
     except Exception as e:
-        # Fallback to simulation if offline
-        print(f"Weather Fetch Error: {e}")
+        print(f"Weather Fetch Error [{junction_id}]: {e}")
         return {
-            "condition": "Sunny", "icon": "☀️", "temperature_c": 28, "humidity_pct": 60,
-            "delay_multiplier": 1.0, "advice": "Normal conditions (Fallback).",
-            "transport_suggestions": ["Car", "Bus"], "source": "SIMULATED (Fallback)"
+            "condition": "Unknown", "icon": "🌐", "temperature_c": "--", "humidity_pct": 60,
+            "delay_multiplier": 1.0, "advice": "Weather data unavailable.",
+            "transport_suggestions": ["Car", "Bus"], "source": "FETCH FAILED"
         }

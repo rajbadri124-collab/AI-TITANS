@@ -507,7 +507,7 @@
               <td><span class="badge ${ds}">${ds}</span></td>
               <td><span style="color:white;font-weight:600;">${conf}%</span>
                 <div class="conf-bar"><div class="conf-bar-fill" style="width:${conf}%;background:${col};"></div></div></td>
-              ${cols === 4 ? `<td style="font-size:12px;color:var(--text-dim);">${j.weather?.icon || ''} ${j.weather?.condition || ''}</td>` : ''}
+              ${cols === 4 ? `<td style="font-size:12px;"><span style="font-size:16px;">${j.weather?.icon || '🌐'}</span> <span style="color:white;font-weight:600;">${j.weather?.condition || 'N/A'}</span><br><span style="color:var(--text-dim);">${j.weather?.temperature_c !== undefined ? j.weather.temperature_c + '°C' : '--'}</span></td>` : ''}
             </tr>`;
           });
           const el = document.getElementById(tbodyId);
