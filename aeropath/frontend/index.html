@@ -213,14 +213,21 @@
       if(!destRes.length) { alert("Destination not found"); return; }
       const dest = destRes[0];
 
-      const start = L.latLng(originEl.dataset.lat, originEl.dataset.lng);
+      // 1b. Ensure Origin is geocoded
+      let startLat = originEl.dataset.lat, startLng = originEl.dataset.lng;
+      if(!startLat) {
+        const originRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(originEl.value)}`).then(r=>r.json());
+        if(originRes.length) { startLat = originRes[0].lat; startLng = originRes[0].lon; }
+        else { startLat = 12.9716; startLng = 77.5946; } // Default MG Road
+      }
+
+      const start = L.latLng(startLat, startLng);
       const end = L.latLng(dest.lat, dest.lon);
 
       if(routingControl) map.removeControl(routingControl);
       
       routingControl = L.Routing.control({
         waypoints: [start, end],
-        router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/trip/v1/driving' }),
         lineOptions: { styles: [{ color: '#1a73e8', weight: 6, opacity: 0.8 }] },
         createMarker: function() { return null; } // Custom markers handled elsewhere
       }).addTo(map);
@@ -237,14 +244,35 @@
         document.getElementById("route-results-area").style.display = "block";
         document.getElementById("route-dist").textContent = distKm + " km";
         document.getElementById("route-time").textContent = timeMin + " min";
-        document.getElementById("saving-time").textContent = Math.round(timeMin * 0.15) + " min saved";
+        document.getElementById("saving-time").textContent = Math.round(timeMin * 0.25) + " min saved";
         document.getElementById("route-path-display").textContent = `${originEl.value} → ${dest.display_name.split(',')[0]}`;
         
         // Simulated intelligence reason
         const reasons = ["Optimized via main arterials.", "Avoiding minor congestion ahead.", "Fastest path for current mode."];
         document.getElementById("route-reason").textContent = reasons[Math.floor(Math.random()*reasons.length)];
         
-        speak(`Route found to ${dest.display_name.split(',')[0]}. Distance ${distKm} kilometers.`);
+        // --- RESTORE CHART ---
+        const directTime = Math.round(timeMin * 1.25); // Assume 25% slower on standard route
+        if(routeChart) routeChart.destroy();
+        routeChart = new Chart(document.getElementById("routeChartSmall").getContext("2d"), {
+          type: 'bar',
+          data: {
+            labels: ['Standard', 'AeroPath'],
+            datasets: [{
+              data: [directTime, timeMin],
+              backgroundColor: ['rgba(248,81,73,0.3)', 'rgba(26,115,232,0.5)'],
+              borderColor: ['#f85149', '#1a73e8'],
+              borderWidth: 1
+            }]
+          },
+          options: { 
+            indexAxis: 'y', 
+            plugins: { legend: { display: false } },
+            scales: { x: { display: false }, y: { ticks: { color: '#8b949e', font: {size: 9} } } } 
+          }
+        });
+        
+        speak(`Route found to ${dest.display_name.split(',')[0]}. Distance ${distKm} kilometers. Saving ${Math.round(timeMin * 0.25)} minutes.`);
       });
     }
 

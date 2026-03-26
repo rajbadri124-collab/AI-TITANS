@@ -68,9 +68,18 @@ def simulate_weather(junction_id):
         
         impact = WEATHER_IMPACT.get(condition, WEATHER_IMPACT["Sunny"])
         
+        # NIGHT TIME CHECK
+        icon = WEATHER_ICONS.get(condition, "🌤️")
+        hour = datetime.datetime.now().hour
+        if (hour >= 18 or hour < 6):
+            if condition in ["Sunny", "Clear", "Partly Cloudy"]:
+                icon = "🌙"
+            elif condition == "Rainy":
+                icon = "🌧️" # Keep rain but maybe a darker one if we had it
+        
         return {
             "condition": condition,
-            "icon": WEATHER_ICONS.get(condition, "🌤️"),
+            "icon": icon,
             "temperature_c": temp,
             "humidity_pct": real_hum,
             "delay_multiplier": impact["delay_multiplier"],
