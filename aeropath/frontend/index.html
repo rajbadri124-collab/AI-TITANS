@@ -71,7 +71,8 @@
 
         <div class="input-group" style="margin-top:14px;">
           <label id="lbl-to">To (Global Search)</label>
-          <input type="text" id="route-dest-search" class="input-modern" placeholder="Any address worldwide...">
+          <input type="text" id="route-dest-search" class="input-modern" placeholder="Any address worldwide..." oninput="fetchSuggestions(this.value)" autocomplete="off">
+          <div id="dest-autocomplete-list" class="autocomplete-items"></div>
         </div>
 
         <button class="btn-primary" id="btn-route" style="margin-top:16px;" onclick="planRouteGlobal()">🗺 Find Shorter Route</button>
@@ -182,6 +183,44 @@
       document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.title.toLowerCase() === mode));
       speak(`Mode changed to ${mode}`);
     }
+
+    // --- AUTOCOMPLETE ---
+    let debounceTimer;
+    async function fetchSuggestions(query) {
+      const list = document.getElementById("dest-autocomplete-list");
+      if (!query || query.length < 3) { list.innerHTML = ""; return; }
+
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+          const data = await res.json();
+          
+          list.innerHTML = "";
+          data.forEach(item => {
+            const div = document.createElement("div");
+            const mainText = item.display_name.split(',')[0];
+            const subText = item.display_name.split(',').slice(1).join(',').substring(0, 60);
+            div.innerHTML = `<strong>${mainText}</strong><br><small style="color:#8b949e">${subText}...</small>`;
+            
+            // On click, set input value and clear suggestions
+            div.onclick = function() {
+              document.getElementById("route-dest-search").value = item.display_name;
+              list.innerHTML = "";
+            };
+            list.appendChild(div);
+          });
+        } catch(err) { console.error("Autocomplete error:", err); }
+      }, 400); // 400ms debounce typing
+    }
+
+    // Close autocomplete when clicking outside
+    document.addEventListener("click", function(e) {
+      if(e.target.id !== "route-dest-search") {
+        const list = document.getElementById("dest-autocomplete-list");
+        if(list) list.innerHTML = "";
+      }
+    });
 
     // --- GEOLOCATION ---
     function detectLocation() {
