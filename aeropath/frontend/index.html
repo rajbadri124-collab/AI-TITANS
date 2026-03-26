@@ -71,7 +71,10 @@
 
         <div class="input-group" style="margin-top:14px;">
           <label id="lbl-to">To (Global Search)</label>
-          <input type="text" id="route-dest-search" class="input-modern" placeholder="Any address worldwide..." oninput="fetchSuggestions(this.value)" autocomplete="off">
+          <div style="display:flex;gap:5px;">
+            <input type="text" id="route-dest-search" class="input-modern" placeholder="Any address worldwide..." oninput="fetchSuggestions(this.value)" autocomplete="off" style="flex:1;">
+            <button onclick="startDestDictation()" id="btn-dest-mic" style="background:transparent;border:1px solid rgba(255,255,255,0.1);color:#8b949e;border-radius:8px;padding:6px 12px;cursor:pointer;transition:0.3s;" title="Voice Input"><i class="fa-solid fa-microphone"></i></button>
+          </div>
           <div id="dest-autocomplete-list" class="autocomplete-items"></div>
         </div>
 
@@ -81,7 +84,10 @@
       <!-- ROUTE RESULTS -->
       <div id="route-results-area" style="display:none;">
         <div class="panel result-panel active-result" style="padding:15px;">
-           <div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px;">Intelligent Route Comparison</div>
+           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+               <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;">Intelligent Route</div>
+               <span class="badge badge-success" id="top-saving-badge" style="background:#22c55e;color:#000;font-weight:bold;font-size:10px;">-- MIN SAVED</span>
+           </div>
            
            <!-- Route A -->
            <div id="route-card-a" class="route-card selected" onclick="selectRoute(0)">
@@ -316,7 +322,13 @@
       routingControl = L.Routing.control({
         waypoints: [start, end],
         lineOptions: { styles: [{ color: '#1a73e8', weight: 6, opacity: 0.8 }] },
-        createMarker: function() { return null; } // Custom markers handled elsewhere
+        createMarker: function(i, wp, nWps) {
+          const char = i === 0 ? 'A' : (i === nWps - 1 ? 'B' : '');
+          if (!char) return null;
+          const bg = i === 0 ? '#1a73e8' : '#ef4444';
+          const html = `<div style="background:${bg};color:#fff;width:24px;height:24px;border-radius:50%;text-align:center;line-height:24px;font-weight:bold;font-size:12px;border:2px solid #fff;box-shadow:0 0 10px rgba(0,0,0,0.5);">${char}</div>`;
+          return L.marker(wp.latLng, { icon: L.divIcon({className:'', html:html, iconAnchor:[12,12]}) });
+        }
       }).addTo(map);
 
       routingControl.on('routesfound', function(e) {
@@ -343,9 +355,11 @@
         document.getElementById("route-b-badge").style.background = "rgba(239,68,68,0.1)";
         document.getElementById("route-b-badge").style.color = "#ef4444";
 
-        document.getElementById("route-reason").innerHTML = "<b>AeroPath AI</b> routed you around <span style='color:#ef4444;'>Level 4 congestion</span> on the primary arterial road, saving " + (timeB - timeMin) + " minutes.";
+        const saved = timeB - timeMin;
+        document.getElementById("top-saving-badge").textContent = saved + " MIN SAVED";
+        document.getElementById("route-reason").innerHTML = "<b>AeroPath AI</b> routed you around <span style='color:#ef4444;'>Level 4 congestion</span> on the primary arterial road, saving " + saved + " minutes.";
         
-        speak(`Found optimal route. Saving ${timeB - timeMin} minutes compared to standard traffic.`);
+        speak(`Found optimal route. Saving ${saved} minutes compared to standard traffic.`);
         
         // Ensure Route A is visually selected initially
         selectRoute(0);
@@ -505,6 +519,37 @@
           micBtn.style.color = "#8b949e";
           micBtn.style.borderColor = "rgba(255,255,255,0.1)";
           chat(); // Auto-send
+        };
+
+        recognition.onerror = function(e) {
+          recognition.stop();
+          micBtn.style.color = "#8b949e";
+          micBtn.style.borderColor = "rgba(255,255,255,0.1)";
+        }
+      } else {
+        alert("Voice recognition is not supported in this browser.");
+      }
+    }
+
+    function startDestDictation() {
+      if (window.hasOwnProperty('webkitSpeechRecognition')) {
+        const recognition = new webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = currentLang === 'hi' ? "hi-IN" : (currentLang === 'kn' ? "kn-IN" : "en-US");
+        
+        const micBtn = document.getElementById('btn-dest-mic');
+        micBtn.style.color = "#ef4444";
+        micBtn.style.borderColor = "#ef4444";
+        
+        recognition.start();
+
+        recognition.onresult = function(e) {
+          document.getElementById('route-dest-search').value = e.results[0][0].transcript;
+          recognition.stop();
+          micBtn.style.color = "#8b949e";
+          micBtn.style.borderColor = "rgba(255,255,255,0.1)";
+          fetchSuggestions(e.results[0][0].transcript); // Auto-fetch suggestions
         };
 
         recognition.onerror = function(e) {
