@@ -126,10 +126,13 @@
 
            <!-- MODE COMPARISON TABLE -->
            <div id="mode-comparison" class="panel" style="margin-top:15px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:12px;">
-             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-               <div style="font-size:10px;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:1px;"><i class="fa-solid fa-list-check"></i> Mode comparison</div>
-               <button onclick="readModes()" style="background:transparent;border:none;color:var(--accent-blue);cursor:pointer;font-size:14px;" title="Listen to Summary"><i class="fa-solid fa-volume-high"></i></button>
-             </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div style="font-size:10px;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:1px;"><i class="fa-solid fa-list-check"></i> Mode comparison</div>
+                <div style="display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text-dim);">
+                  <label for="auto-read-toggle">Auto-Read</label>
+                  <input type="checkbox" id="auto-read-toggle" checked style="accent-color:var(--accent-blue)"/>
+                </div>
+              </div>
              <table style="width:100%;font-size:11px;border-collapse:collapse;">
                <thead>
                  <tr style="text-align:left;border-bottom:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);">
@@ -222,7 +225,7 @@
 
     const translations = {
       en: { title:"AeroPath AI", find:"Find Shorter Route", from:"From (Auto-detected)", to:"To (Global Search)", mode:"Transportation Mode", saved:"min saved", reason:"PROPER REASON" },
-      hi: { title:"एयरोपाथ AI", find:"छोटा रास्ता खोजें", from:"से (स्वचालित)", to:"तक (वैश्विक खोज)", mode:"परिवहन मोड", saved:"मಿನುಟ್‌ ಬಚಾಯೆ", reason:"ಒಚಿತ ಕಾರಣ" },
+      hi: { title:"एयरोपाथ AI", find:"छोटा रास्ता खोजें", from:"से (स्वचालित)", to:"तक (वैश्विक खोज)", mode:"परिवहन मोड", saved:"मिनुಟ್‌ बचाये", reason:"ಒಚಿತ ಕಾರಣ" },
       kn: { title:"ಏರೋಪಾತ್ AI", find:"ಸಣ್ಣ ಮಾರ್ಗ ಪತ್ತೆ ಮಾಡಿ", from:"ಇಂದ (ಸ್ವಯಂಚಾಲಿತ)", to:"ವರೆಗೆ (ಜಾಗತಿಕ ಹುಡುಕಾಟ)", mode:"ಸಾರಿಗೆ ವಿವರ", saved:"ನಿಮಿಷ ಉಳಿಸಲಾಗಿದೆ", reason:"ಸರಿಯಾದ ಕಾರಣ" }
     };
 
@@ -435,9 +438,9 @@
 
         startRouteGuard(); 
         
-        // AUTO-READ SUMMARY (Phase 15 Feature)
-        if(document.getElementById("voice-toggle").checked) {
-            setTimeout(readModes, 2000); 
+        // AUTO-READ MODES (If Toggled)
+        if(document.getElementById("auto-read-toggle").checked && document.getElementById("voice-toggle").checked) {
+            setTimeout(readModes, 1500); 
         }
       });
     }
