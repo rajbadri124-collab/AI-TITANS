@@ -120,8 +120,8 @@
     <div class="nav-left">
       <div class="logo"><i class="fa-solid fa-route" style="color:var(--accent);margin-right:8px;"></i>Aero<span>Path</span></div>
       <div class="nav-links">
-        <a href="/"><i class="fa-solid fa-map-location-dot"></i> Live Map</a>
-        <a href="/dashboard" class="active"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+        <a href="index.html"><i class="fa-solid fa-map-location-dot"></i> Live Map</a>
+        <a href="dashboard" class="active"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
       </div>
     </div>
     <div class="nav-right">
@@ -215,32 +215,13 @@
           <div id="u-alert-list"><div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching alerts...</div></div>
         </div>
         <div class="card">
-          <div class="card-header"><div class="card-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Predict Congestion</div></div>
-          <div class="predict-form">
-            <select id="p-hour">
-              <option value="8">8 AM (Morning Rush)</option>
-              <option value="10">10 AM</option>
-              <option value="14">2 PM</option>
-              <option value="17">5 PM (Evening Rush)</option>
-              <option value="22">10 PM</option>
-            </select>
-            <select id="p-weather">
-              <option value="0">Sunny</option>
-              <option value="1">Rainy</option>
-              <option value="2">Foggy</option>
-            </select>
-            <button onclick="manualPredict()"><i class="fa-solid fa-bolt"></i> Predict</button>
-            <div id="predict-result"></div>
-          </div>
-        </div>
-        <div class="card">
           <div class="card-header"><div class="card-title"><i class="fa-solid fa-road"></i> My Route</div></div>
           <div class="kv-row"><span>From</span><span id="d-origin">--</span></div>
           <div class="kv-row"><span>To</span><span id="d-dest">--</span></div>
           <div class="kv-row"><span>Distance</span><span id="d-dist">--</span></div>
           <div class="kv-row"><span>Travel Time</span><span id="d-time">--</span></div>
           <div class="kv-row"><span>Mode</span><span id="d-mode">--</span></div>
-          <a href="/" class="big-btn blue-btn" style="margin-top:16px;display:block;"><i class="fa-solid fa-map-location-dot"></i> Back to Map</a>
+          <a href="index.html" class="big-btn blue-btn" style="margin-top:16px;display:block;"><i class="fa-solid fa-map-location-dot"></i> Back to Map</a>
         </div>
       </div>
     </div>
@@ -330,7 +311,7 @@
         <div class="card">
           <div class="card-header"><div class="card-title" style="color:var(--red);"><i class="fa-solid fa-bolt"></i> Emergency Actions</div></div>
           <button class="big-btn green-btn" onclick="activateGreenWave()"><i class="fa-solid fa-traffic-light"></i> Activate Green Wave</button>
-          <a href="/" class="big-btn red-btn"><i class="fa-solid fa-map-location-dot"></i> Open Map & Navigate</a>
+          <a href="index.html" class="big-btn red-btn"><i class="fa-solid fa-map-location-dot"></i> Open Map & Navigate</a>
         </div>
       </div>
     </div>
@@ -535,20 +516,7 @@
     }
     updateDashboard(); setInterval(updateDashboard, 5000);
 
-    // ---- Congestion Prediction ----
-    function manualPredict() {
-      const hour = document.getElementById('p-hour').value;
-      const weather = document.getElementById('p-weather').value;
-      const isRush = [8, 9, 17, 18, 19].includes(parseInt(hour)) ? 1 : 0;
-      fetch(`${API}/api/predict?hour=${hour}&is_rush=${isRush}&is_weekend=0&weather=${weather}`)
-        .then(r => r.json()).then(d => {
-          const col = colorMap[d.level] || '#6366f1';
-          const res = document.getElementById('predict-result');
-          res.style.display = 'block';
-          res.innerHTML = `<div style="font-size:28px;font-weight:800;color:${col};">${d.level}</div>
-            <div style="font-size:12px;color:var(--text-dim);margin-top:4px;">Confidence: ${Math.round(d.confidence * 100)}%</div>`;
-        });
-    }
+    // Removed manualPredict to rely on real-time traffic data
 
     // ---- Green Wave (Ambulance) ----
     function activateGreenWave() {
