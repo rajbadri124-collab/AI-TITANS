@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AeroPath AI — Smart Mobility Command</title>
+  <script>
+    if(!localStorage.getItem('aeropath_auth')) window.location.href='login.html';
+  </script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <h1><span>🛣</span> AeroPath AI</h1>
+      <span id="data-source-badge">📡 LIVE</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px;">
+      <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-dim);">
+        <input type="checkbox" id="voice-toggle" checked style="accent-color:var(--accent-blue)"/>
+        <label for="voice-toggle">Voice</label>
+      </div>
+      <div id="user-display" style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:8px;">
+        <span id="user-email">admin@aeropath.ai</span>
+        <button onclick="logout()" style="background:transparent;border:1px solid var(--border-color);color:var(--accent-red);padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-container">
+    
+    <!-- LEFT SIDEBAR: ROUTE & INTEL -->
+    <div class="sidebar">
+
+      <!-- SMART ROUTE SEARCH -->
+      <div class="panel route-search-panel">
+        <h3 style="margin-bottom:12px;color:var(--accent-blue);">🛰 Smart Pathfinding</h3>
+        
+        <div class="input-group">
+          <label>From (Auto-detected)</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="route-origin-str" class="input-modern" placeholder="Detecting location..." list="junction-options">
+            <button class="btn-icon" title="Refresh Location" onclick="detectLocation()">🔄</button>
+          </div>
+          <input type="hidden" id="route-origin-id">
+        </div>
+
+        <datalist id="junction-options">
+          <option value="MG Road">
+          <option value="Koramangala">
+          <option value="Indiranagar">
+          <option value="Rajajinagar">
+          <option value="HSR Layout">
+        </datalist>
+
+        <div class="input-group" style="margin-top:14px;">
+          <label>To (Destination)</label>
+          <select id="route-dest" class="input-modern">
+            <option value="">Select destination...</option>
+            <option value="J1">MG Road</option>
+            <option value="J2">Koramangala</option>
+            <option value="J3">Indiranagar</option>
+            <option value="J4">Rajajinagar</option>
+            <option value="J5">HSR Layout</option>
+          </select>
+        </div>
+
+        <button class="btn-primary" style="margin-top:16px;" onclick="planRoute()">🗺 Find Shorter Route</button>
+      </div>
+
+      <!-- ROUTE RESULTS -->
+      <div id="route-results-area" style="display:none;">
+        <div class="panel result-panel active-result">
+          <div class="result-header">
+            <span class="badge badge-success">SHORTER WAY FOUND</span>
+            <span class="save-time" id="saving-time">-- min</span>
+          </div>
+          <div class="route-meta">
+             <span id="route-dist">-- km</span> • <span id="route-time">-- min</span>
+          </div>
+          <div class="route-path" id="route-path-display">-- → --</div>
+          <div class="reason-box">
+             <div class="reason-label">PROPER REASON</div>
+             <div id="route-reason">Scanning traffic patterns...</div>
+          </div>
+          <div style="margin-top:12px;">
+            <canvas id="routeChartSmall" height="80"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- NODE PERFORMANCE -->
+      <div class="panel" style="flex:1; overflow:auto;">
+        <div class="panel-header"><h3>Network Nodes</h3></div>
+        <div id="junction-list" class="junction-grid-compact">Loading telemetry...</div>
+      </div>
+
+    </div>
+
+    <!-- CENTER: THE LIVE MAP -->
+    <div class="map-container">
+      <div id="map"></div>
+      
+      <!-- TOP OVERLAYS -->
+      <div class="map-overlay-top">
+        <div id="clock">--:--:--</div>
+        <div id="active-ambulance-alert" style="display:none;">
+          🚑 EMERGENCY: Preemption Active
+        </div>
+      </div>
+
+      <!-- BOTTOM OVERLAYS (TELEMETRY) -->
+      <div class="telemetry-bar">
+        <div class="tel-item"><span class="label">AVG DENSITY</span><span class="val" id="density-val">--%</span></div>
+        <div class="tel-item"><span class="label">NODES</span><span class="val">5/5</span></div>
+        <div class="tel-item"><span class="label">TELEMETRY</span><span class="val val-green" id="ingest-status">● STREAMING</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLLAPSIBLE WIDGETS (Tabbed Panel) -->
+  <div id="widget-tray">
+     <button class="widget-btn" onclick="toggleWidget('chatbot')">💬 AI</button>
+     <button class="widget-btn" onclick="toggleWidget('telemetry')">📡 LOG</button>
+     <button class="widget-btn" onclick="toggleWidget('forecast')">🔮 FC</button>
+  </div>
+
+  <div id="widget-panel" class="panel glass-floating" style="display:none;">
+    <div class="panel-header">
+      <h3 id="widget-title">Widget</h3>
+      <button onclick="toggleWidget()" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;">✕</button>
+    </div>
+    <div id="widget-content"></div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const API = "http://localhost:5000";
+    const markers = {};
+    let ambulanceMarker = null;
+    let routeChart = null;
+    let currentPath = null;
+
+    // --- INIT ---
+    document.getElementById('user-email').textContent = localStorage.getItem('user_email') || 'admin';
+    const map = L.map("map",{zoomControl:false}).setView([12.965,77.595],13);
+    
+    // Google Maps Layer (Standard Streets)
+    L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+      attribution: "&copy; Google Maps"
+    }).addTo(map);
+    detectLocation();
+
+    function logout() { localStorage.clear(); window.location.href='login.html'; }
+
+    // --- GEOLOCATION ---
+    function detectLocation() {
+      const originEl = document.getElementById("route-origin-str");
+      originEl.value = "Detecting location...";
+      if(navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+          const res = await fetch(`${API}/api/geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`).then(r=>r.json());
+          originEl.value = res.name;
+          document.getElementById("route-origin-id").value = res.id;
+          speak(`Location detected at ${res.name}`);
+        }, () => {
+          originEl.value = "Mock Loc: MG Road";
+          document.getElementById("route-origin-id").value = "J1";
+        });
+      } else {
+        originEl.value = "MG Road (Default)";
+        document.getElementById("route-origin-id").value = "J1";
+      }
+    }
+
+    // --- ROUTING ---
+    async function planRoute() {
+      let origin = document.getElementById("route-origin-id").value;
+      const originStr = document.getElementById("route-origin-str").value;
+      const dest = document.getElementById("route-dest").value;
+
+      // Manual Override Logic: Map string name back to ID if ID is missing or string changed
+      const nameToId = {"MG Road":"J1","Koramangala":"J2","Indiranagar":"J3","Rajajinagar":"J4","HSR Layout":"J5"};
+      if(nameToId[originStr]) origin = nameToId[originStr];
+
+      if(!origin || !dest) { alert("Please ensure both From and To locations are valid."); return; }
+      if(origin === dest) { alert("Origin and destination must be different."); return; }
+
+      const data = await fetch(`${API}/api/route?origin=${origin}&dest=${dest}`).then(r=>r.json());
+      if(data.error) { alert(data.error); return; }
+
+      document.getElementById("route-results-area").style.display = "block";
+      document.getElementById("route-path-display").textContent = data.alternate_route.path.join(" → ");
+      document.getElementById("saving-time").textContent = data.time_saving_min + " min saved";
+      document.getElementById("route-dist").textContent = data.alternate_route.distance_km + " km";
+      document.getElementById("route-time").textContent = data.alternate_route.estimated_time_min + " min";
+      document.getElementById("route-reason").textContent = data.reason;
+
+      // Draw Path on Map
+      if(currentPath) map.removeLayer(currentPath);
+      currentPath = L.polyline(data.alternate_route.path_coords, {
+        color: '#1a73e8', // Google Blue
+        weight: 6,
+        opacity: 0.8,
+        lineJoin: 'round'
+      }).addTo(map);
+      map.fitBounds(currentPath.getBounds(), {padding: [50,50]});
+
+      // Update Chart
+      if(routeChart) routeChart.destroy();
+      routeChart = new Chart(document.getElementById("routeChartSmall").getContext("2d"), {
+        type: 'bar',
+        data: {
+          labels: ['Direct', 'AeroPath Opt'],
+          datasets: [{
+            data: [data.direct_route.estimated_time_min, data.alternate_route.estimated_time_min],
+            backgroundColor: ['rgba(248,81,73,0.3)', 'rgba(63,185,80,0.5)'],
+            borderColor: ['#f85149', '#3fb950'],
+            borderWidth: 1
+          }]
+        },
+        options: { indexAxis: 'y', plugins: { legend: { display: false } },
+                   scales: { x: { display: false }, y: { ticks: { color: '#8b949e', font: {size: 9} } } } }
+      });
+      speak(`Optimal route found. Estimated saving ${data.time_saving_min} minutes. Reason: ${data.reason}`);
+    }
+
+    // --- UPDATES ---
+    async function updateData() {
+      const data = await fetch(API+"/api/dashboard/data").then(r=>r.json());
+      document.getElementById("clock").textContent = new Date().toLocaleTimeString();
+      document.getElementById("density-val").textContent = Math.floor(Math.random()*30 + 40) + "%";
+      
+      let html = "";
+      data.junctions.forEach(j => {
+        const col = j.congestion === 'HIGH' ? '#f85149' : (j.congestion === 'MEDIUM' ? '#d29922' : '#3fb950');
+        if(markers[j.id]) {
+          markers[j.id].setStyle({color: col, fillColor: col});
+        } else {
+          markers[j.id] = L.circleMarker([j.lat, j.lng], {radius: 12, weight: 2, color: col, fillColor: col, fillOpacity: 0.6})
+            .addTo(map).bindPopup(`<b>${j.name}</b><br>${j.weather.icon} ${j.weather.condition}<br>📌 ${j.intel.cause}`);
+        }
+        html += `<div class="junction-pill" style="border-left: 3px solid ${col}">
+                   <div class="j-name">${j.name}</div>
+                   <div class="j-stat">${j.weather.icon} ${j.weather.temperature_c}°C</div>
+                 </div>`;
+      });
+      document.getElementById("junction-list").innerHTML = html;
+
+      // Ambulance
+      if(data.ambulance && data.ambulance.lat) {
+        if(!ambulanceMarker) {
+          ambulanceMarker = L.marker([data.ambulance.lat, data.ambulance.lng], {
+            icon: L.divIcon({html: "<div class='amb-icon'>🚑</div>", className: ""})
+          }).addTo(map);
+        } else {
+          ambulanceMarker.setLatLng([data.ambulance.lat, data.ambulance.lng]);
+        }
+        document.getElementById("active-ambulance-alert").style.display = data.ambulance.active ? "block" : "none";
+      }
+    }
+
+    // --- WIDGETS ---
+    function toggleWidget(type) {
+      const panel = document.getElementById("widget-panel");
+      if(!type || panel.dataset.current === type) {
+        panel.style.display = "none";
+        panel.dataset.current = "";
+        return;
+      }
+      panel.style.display = "flex";
+      panel.dataset.current = type;
+      document.getElementById("widget-title").textContent = type.toUpperCase();
+      let content = "";
+      if(type === 'telemetry') {
+        content = '<div id="log-con" class="console"></div>';
+        fetch(API+"/api/telemetry/log").then(r=>r.json()).then(logs => {
+          document.getElementById("log-con").innerHTML = logs.map(l => `[${l.timestamp}] ${l.source}: ${l.payload}`).join('<br>');
+        });
+      } else if(type === 'forecast') {
+        content = '<div id="fc-area">Loading...</div>';
+      } else if(type === 'chatbot') {
+        content = '<div class="chat-simple"><input id="cm" placeholder="Ask AI..."><button onclick="chat()">➤</button><div id="cr"></div></div>';
+      }
+      document.getElementById("widget-content").innerHTML = content;
+    }
+
+    function speak(t) { if(document.getElementById("voice-toggle").checked) speechSynthesis.speak(new SpeechSynthesisUtterance(t)); }
+    setInterval(updateData, 5000);
+    updateData();
+  </script>
+</body>
+</html>
