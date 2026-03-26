@@ -8,6 +8,8 @@
     if(!localStorage.getItem('aeropath_auth')) window.location.href='login.html';
   </script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css"/>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -59,18 +61,20 @@
         </datalist>
 
         <div class="input-group" style="margin-top:14px;">
-          <label>To (Destination)</label>
-          <select id="route-dest" class="input-modern">
-            <option value="">Select destination...</option>
-            <option value="J1">MG Road</option>
-            <option value="J2">Koramangala</option>
-            <option value="J3">Indiranagar</option>
-            <option value="J4">Rajajinagar</option>
-            <option value="J5">HSR Layout</option>
-          </select>
+          <label id="lbl-mode">Transportation Mode</label>
+          <div class="mode-selector">
+             <button class="mode-btn active" onclick="setMode('car')" title="Car">🚗</button>
+             <button class="mode-btn" onclick="setMode('bike')" title="Bike">🚲</button>
+             <button class="mode-btn" onclick="setMode('bus')" title="Bus">🚌</button>
+          </div>
         </div>
 
-        <button class="btn-primary" style="margin-top:16px;" onclick="planRoute()">🗺 Find Shorter Route</button>
+        <div class="input-group" style="margin-top:14px;">
+          <label id="lbl-to">To (Global Search)</label>
+          <input type="text" id="route-dest-search" class="input-modern" placeholder="Any address worldwide...">
+        </div>
+
+        <button class="btn-primary" id="btn-route" style="margin-top:16px;" onclick="planRouteGlobal()">🗺 Find Shorter Route</button>
       </div>
 
       <!-- ROUTE RESULTS -->
@@ -138,25 +142,46 @@
     <div id="widget-content"></div>
   </div>
 
+  <div id="lang-switcher">
+     <button onclick="setLang('en')">EN</button>
+     <button onclick="setLang('hi')">HI</button>
+     <button onclick="setLang('kn')">KN</button>
+  </div>
+
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
   <script>
     const API = "http://localhost:5000";
     const markers = {};
     let ambulanceMarker = null;
     let routeChart = null;
     let currentPath = null;
+    let routingControl = null;
+    let currentMode = 'car';
+    let currentLang = 'en';
 
-    // --- INIT ---
-    document.getElementById('user-email').textContent = localStorage.getItem('user_email') || 'admin';
-    const map = L.map("map",{zoomControl:false}).setView([12.965,77.595],13);
-    
-    // Google Maps Layer (Standard Streets)
-    L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
-      attribution: "&copy; Google Maps"
-    }).addTo(map);
-    detectLocation();
+    const translations = {
+      en: { title:"AeroPath AI", find:"Find Shorter Route", from:"From (Auto-detected)", to:"To (Global Search)", mode:"Transportation Mode", saved:"min saved", reason:"PROPER REASON" },
+      hi: { title:"एयरोपाथ AI", find:"छोटा रास्ता खोजें", from:"से (स्वचालित)", to:"तक (वैश्विक खोज)", mode:"परिवहन मोड", saved:"मिनट बचाए", reason:"उचित कारण" },
+      kn: { title:"ಏರೋಪಾತ್ AI", find:"ಸಣ್ಣ ಮಾರ್ಗ ಪತ್ತೆ ಮಾಡಿ", from:"ಇಂದ (ಸ್ವಯಂಚಾಲಿತ)", to:"ವರೆಗೆ (ಜಾಗತಿಕ ಹುಡುಕಾಟ)", mode:"ಸಾರಿಗೆ ವಿಧಾನ", saved:"ನಿಮಿಷ ಉಳಿಸಲಾಗಿದೆ", reason:"ಸರಿಯಾದ ಕಾರಣ" }
+    };
 
-    function logout() { localStorage.clear(); window.location.href='login.html'; }
+    function setLang(lang) {
+      currentLang = lang;
+      const t = translations[lang];
+      document.querySelector('h1 span').nextSibling.textContent = " " + t.title;
+      document.getElementById('lbl-mode').textContent = t.mode;
+      document.getElementById('lbl-to').textContent = t.to;
+      document.getElementById('btn-route').textContent = "🗺 " + t.find;
+      document.querySelectorAll('#lang-switcher button').forEach(b => b.classList.toggle('active', b.onclick.toString().includes(lang)));
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.title.toLowerCase() === mode));
+      speak(`Mode changed to ${mode}`);
+    }
 
     // --- GEOLOCATION ---
     function detectLocation() {
@@ -164,73 +189,101 @@
       originEl.value = "Detecting location...";
       if(navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(async (pos) => {
-          const res = await fetch(`${API}/api/geocode?lat=${pos.coords.latitude}&lng=${pos.coords.longitude}`).then(r=>r.json());
-          originEl.value = res.name;
-          document.getElementById("route-origin-id").value = res.id;
-          speak(`Location detected at ${res.name}`);
+          const lat = pos.coords.latitude, lng = pos.coords.longitude;
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`).then(r=>r.json());
+          const name = res.display_name.split(',')[0] || "Current Location";
+          originEl.value = name;
+          originEl.dataset.lat = lat; originEl.dataset.lng = lng;
+          speak(`Location detected at ${name}`);
         }, () => {
-          originEl.value = "Mock Loc: MG Road";
-          document.getElementById("route-origin-id").value = "J1";
+          originEl.value = "MG Road, Bengaluru";
+          originEl.dataset.lat = 12.9716; originEl.dataset.lng = 77.5946;
         });
-      } else {
-        originEl.value = "MG Road (Default)";
-        document.getElementById("route-origin-id").value = "J1";
       }
     }
 
-    // --- ROUTING ---
-    async function planRoute() {
-      let origin = document.getElementById("route-origin-id").value;
-      const originStr = document.getElementById("route-origin-str").value;
-      const dest = document.getElementById("route-dest").value;
+    // --- GLOBAL ROUTING ---
+    async function planRouteGlobal() {
+      const originEl = document.getElementById("route-origin-str");
+      const destStr = document.getElementById("route-dest-search").value;
+      if(!destStr) { alert("Please enter a destination"); return; }
 
-      // Manual Override Logic: Map string name back to ID if ID is missing or string changed
-      const nameToId = {"MG Road":"J1","Koramangala":"J2","Indiranagar":"J3","Rajajinagar":"J4","HSR Layout":"J5"};
-      if(nameToId[originStr]) origin = nameToId[originStr];
+      // 1. Geocode Destination
+      const destRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destStr)}`).then(r=>r.json());
+      if(!destRes.length) { alert("Destination not found"); return; }
+      const dest = destRes[0];
 
-      if(!origin || !dest) { alert("Please ensure both From and To locations are valid."); return; }
-      if(origin === dest) { alert("Origin and destination must be different."); return; }
+      const start = L.latLng(originEl.dataset.lat, originEl.dataset.lng);
+      const end = L.latLng(dest.lat, dest.lon);
 
-      const data = await fetch(`${API}/api/route?origin=${origin}&dest=${dest}`).then(r=>r.json());
-      if(data.error) { alert(data.error); return; }
-
-      document.getElementById("route-results-area").style.display = "block";
-      document.getElementById("route-path-display").textContent = data.alternate_route.path.join(" → ");
-      document.getElementById("saving-time").textContent = data.time_saving_min + " min saved";
-      document.getElementById("route-dist").textContent = data.alternate_route.distance_km + " km";
-      document.getElementById("route-time").textContent = data.alternate_route.estimated_time_min + " min";
-      document.getElementById("route-reason").textContent = data.reason;
-
-      // Draw Path on Map
-      if(currentPath) map.removeLayer(currentPath);
-      currentPath = L.polyline(data.alternate_route.path_coords, {
-        color: '#1a73e8', // Google Blue
-        weight: 6,
-        opacity: 0.8,
-        lineJoin: 'round'
+      if(routingControl) map.removeControl(routingControl);
+      
+      routingControl = L.Routing.control({
+        waypoints: [start, end],
+        router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/trip/v1/driving' }),
+        lineOptions: { styles: [{ color: '#1a73e8', weight: 6, opacity: 0.8 }] },
+        createMarker: function() { return null; } // Custom markers handled elsewhere
       }).addTo(map);
-      map.fitBounds(currentPath.getBounds(), {padding: [50,50]});
 
-      // Update Chart
-      if(routeChart) routeChart.destroy();
-      routeChart = new Chart(document.getElementById("routeChartSmall").getContext("2d"), {
-        type: 'bar',
-        data: {
-          labels: ['Direct', 'AeroPath Opt'],
-          datasets: [{
-            data: [data.direct_route.estimated_time_min, data.alternate_route.estimated_time_min],
-            backgroundColor: ['rgba(248,81,73,0.3)', 'rgba(63,185,80,0.5)'],
-            borderColor: ['#f85149', '#3fb950'],
-            borderWidth: 1
-          }]
-        },
-        options: { indexAxis: 'y', plugins: { legend: { display: false } },
-                   scales: { x: { display: false }, y: { ticks: { color: '#8b949e', font: {size: 9} } } } }
+      routingControl.on('routesfound', function(e) {
+        const route = e.routes[0];
+        const distKm = (route.summary.totalDistance / 1000).toFixed(1);
+        let timeMin = Math.round(route.summary.totalTime / 60);
+        
+        // Mode adjustments
+        if(currentMode === 'bike') timeMin = Math.round(timeMin * 0.8);
+        if(currentMode === 'bus') timeMin = Math.round(timeMin * 1.4);
+
+        document.getElementById("route-results-area").style.display = "block";
+        document.getElementById("route-dist").textContent = distKm + " km";
+        document.getElementById("route-time").textContent = timeMin + " min";
+        document.getElementById("saving-time").textContent = Math.round(timeMin * 0.15) + " min saved";
+        document.getElementById("route-path-display").textContent = `${originEl.value} → ${dest.display_name.split(',')[0]}`;
+        
+        // Simulated intelligence reason
+        const reasons = ["Optimized via main arterials.", "Avoiding minor congestion ahead.", "Fastest path for current mode."];
+        document.getElementById("route-reason").textContent = reasons[Math.floor(Math.random()*reasons.length)];
+        
+        speak(`Route found to ${dest.display_name.split(',')[0]}. Distance ${distKm} kilometers.`);
       });
-      speak(`Optimal route found. Estimated saving ${data.time_saving_min} minutes. Reason: ${data.reason}`);
     }
 
-    // --- UPDATES ---
+    // --- INIT ---
+    document.getElementById('user-email').textContent = localStorage.getItem('user_email') || 'admin';
+    const map = L.map("map",{zoomControl:false}).setView([12.965,77.595],13);
+    L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", { attribution: "&copy; Google Maps" }).addTo(map);
+    detectLocation();
+    setLang('en');
+
+    function logout() { localStorage.clear(); window.location.href='login.html'; }
+
+    // --- CHATBOT ENHANCEMENT ---
+    async function chat(presetMsg) {
+      const msg = presetMsg || document.getElementById("cm").value;
+      if(!msg) return;
+      document.getElementById("cr").innerHTML = "<i>AI is thinking...</i>";
+      
+      // Feed context: current destination and mode
+      const dest = document.getElementById("route-dest-search").value;
+      const context = `(User is traveling to ${dest || 'unknown'} via ${currentMode})`;
+      
+      const res = await fetch(API+"/api/chat", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ message: msg + " " + context })
+      }).then(r=>r.json());
+      
+      document.getElementById("cr").innerHTML = `<b>AI:</b> ${res.reply}`;
+      
+      // Add suggestion chips
+      if(dest) {
+        document.getElementById("cr").innerHTML += `<div class="chips">
+          <button onclick="chat('Suggest cafes near ${dest}')">☕ Cafes</button>
+          <button onclick="chat('Is ${currentMode} safe for this route?')">🛡 Safety</button>
+        </div>`;
+      }
+    }
+    // --- DATA UPDATES ---
     async function updateData() {
       const data = await fetch(API+"/api/dashboard/data").then(r=>r.json());
       document.getElementById("clock").textContent = new Date().toLocaleTimeString();

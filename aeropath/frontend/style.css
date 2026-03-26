@@ -81,3 +81,24 @@ header h1 { font-size:16px; font-weight:800; background:linear-gradient(90deg,#5
 /* AMBULANCE ICON */
 .amb-icon { font-size:28px; filter: drop-shadow(0 0 10px var(--accent-red)); animation: ambMove 1s infinite alternate; }
 @keyframes ambMove { from{transform:translateY(0)} to{transform:translateY(-5px)} }
+
+/* MODE SELECTOR */
+.mode-selector { display:flex; gap:8px; margin-top:4px; }
+.mode-btn { flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--border-color); border-radius:10px; padding:12px; font-size:18px; cursor:pointer; transition: all 0.2s; }
+.mode-btn:hover { background:rgba(255,255,255,0.1); border-color:var(--accent-blue); }
+.mode-btn.active { background:rgba(26,115,232,0.2); border-color:var(--accent-blue); box-shadow:0 0 15px rgba(26,115,232,0.3); }
+
+/* LANG SWITCHER */
+#lang-switcher { position:fixed; top:80px; right:20px; z-index:1000; display:flex; gap:5px; background:var(--panel-bg); padding:5px; border-radius:20px; border:1px solid var(--border-color); }
+#lang-switcher button { background:transparent; border:none; color:var(--text-dim); font-size:10px; font-weight:800; padding:5px 10px; cursor:pointer; border-radius:15px; }
+#lang-switcher button:hover { color:#fff; }
+#lang-switcher button.active { background:var(--accent-blue); color:#fff; }
+
+/* ROUTING MACHINE OVERRIDE */
+.leaflet-routing-container { background: var(--panel-bg) !important; color: white !important; border: 1px solid var(--border-color) !important; border-radius: 12px !important; font-family: inherit !important; font-size: 11px !important; }
+.leaflet-routing-alt { border-bottom: 1px solid var(--border-color) !important; }
+
+/* CHIPS */
+.chips { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.chips button { background:rgba(255,255,255,0.05); border:1px solid var(--border-color); color:var(--accent-blue); padding:4px 10px; border-radius:15px; font-size:10px; cursor:pointer; font-weight:700; transition:0.2s; }
+.chips button:hover { background:var(--accent-blue); color:#fff; }

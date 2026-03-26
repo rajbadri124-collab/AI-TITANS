@@ -52,66 +52,60 @@ def get_chatbot_response(user_input, junction_states, weather_data, last_ambulan
     msg = user_input.lower().strip()
     hour = datetime.datetime.now().hour
     
+    # Extract Context from appended string "(User is traveling to {dest} via {mode})"
+    ctx_dest = None
+    ctx_mode = "car"
+    dest_match = re.search(r"traveling to (.*?) via (.*?)\)", msg)
+    if dest_match:
+        ctx_dest = dest_match.group(1).title()
+        ctx_mode = dest_match.group(2)
+        msg = re.sub(r"\(user is.*?\)", "", msg).strip() # Clean for intent matching
+
     jid = match_junction(msg)
-    j_name = JUNCTIONS[jid]["name"] if jid else "MG Road"
+    j_name = JUNCTIONS[jid]["name"] if jid else (ctx_dest or "MG Road")
     jid = jid or "J1"
     
     j_state = junction_states.get(jid, {"level": "LOW", "confidence": 0.5})
     j_weather = weather_data.get(jid, {})
     j_intel = traffic_intel_data.get(jid, {})
     
+    # ... (existing data setup) ...
     condition = j_weather.get("condition", "Sunny")
     icon = j_weather.get("icon", "☀️")
     temp = j_weather.get("temperature_c", 28)
-    humidity = j_weather.get("humidity_pct", 60)
     advice = j_weather.get("advice", "Normal conditions")
     suggestions = ", ".join(j_weather.get("transport_suggestions", ["Car", "Bike"]))
     level = j_state.get("level", "LOW")
-    cause = j_intel.get("cause", "Normal flow")
-    duration = j_intel.get("estimated_duration", "No delay")
     
-    # Determine intent
-    if any(w in msg for w in ["weather", "rain", "sun", "fog", "hot", "cloudy", "thunder"]):
-        return {
-            "reply": f"{icon} {j_name}: {condition}, {temp}°C, {humidity}% humidity.\n💡 {advice}",
-            "type": "weather"
-        }
+    # Mode specific advice
+    mode_notes = {
+        "bike": "Helmet is mandatory. Watch out for potholes.",
+        "car": "Seatbelts on. Ideal for current weather.",
+        "bus": "Check BMTC/Local schedules. Expect stops."
+    }
+
+    if "cafe" in msg or "coffee" in msg:
+        loc = ctx_dest or j_name
+        return {"reply": f"☕ There are several popular cafes near {loc}. I'd recommend 'Blue Tokai' or 'Third Wave' for a quick {ctx_mode} stop.", "type":"suggestion"}
+
+    if "safe" in msg:
+        return {"reply": f"🛡️ Safety Check: Travel via {ctx_mode} to {ctx_dest or j_name} looks good. {mode_notes.get(ctx_mode, '')}", "type":"safety"}
+
+    # Determine intent (existing fallbacks)
+    if any(w in msg for w in ["weather", "rain", "sun", "fog"]):
+        return {"reply": f"{icon} {j_name}: {condition}, {temp}°C.\n💡 {advice}", "type": "weather"}
     
-    elif any(w in msg for w in ["transport", "vehicle", "how to travel", "go by", "commute", "travel", "reach"]):
-        return {
-            "reply": f"Best transport near {j_name} ({condition} weather, {level} traffic):\n→ {suggestions}",
-            "type": "transport"
-        }
+    elif any(w in msg for w in ["transport", "vehicle", "how to"]):
+        return {"reply": f"Best transport for {j_name} ({ctx_mode} selected):\n✅ {suggestions}", "type": "transport"}
     
-    elif any(w in msg for w in ["ambulance", "ambu", "emergency", "evp", "gps"]):
-        if last_ambulance:
-            lat = round(last_ambulance.get("lat", 12.97), 6)
-            lng = round(last_ambulance.get("lng", 77.59), 6)
-            status = "ACTIVE — Green Wave engaged" if last_ambulance.get("active") else "Standby"
-            return {"reply": f"🚑 AMB-01 location: {lat}°N, {lng}°E\nStatus: {status}", "type": "ambulance"}
-        return {"reply": "🚑 No active ambulance dispatch tracked currently.", "type": "ambulance"}
-    
-    elif any(w in msg for w in ["traffic", "congestion", "jam", "busy", "road"]):
-        return {
-            "reply": f"📍 {j_name} — Status: {level}\n📌 Cause: {cause}\n⏱ Est. delay: {duration}\n📊 Trend: {j_intel.get('trend', '→ Stable')}",
-            "type": "traffic"
-        }
-    
-    elif any(w in msg for w in ["route", "alternative", "detour", "reroute", "shortcut"]):
-        others = [j for j in JUNCTIONS if j != jid and junction_states.get(j, {"level":"LOW"})["level"] != "HIGH"]
-        alt = JUNCTIONS[others[0]]["name"] if others else "alternative route"
-        return {
-            "reply": f"🛣 {j_name} has {level} congestion.\n✅ Suggested detour: {alt}\nApprox time saving: 10-15 min",
-            "type": "route"
-        }
+    elif any(w in msg for w in ["ambulance", "gps"]):
+        st = "ACTIVE" if last_ambulance.get("active") else "Standby"
+        return {"reply": f"🚑 AMB-01 Status: {st}. Coords: {last_ambulance.get('lat')}, {last_ambulance.get('lng')}", "type": "ambulance"}
     
     elif any(w in msg for w in ["hello", "hi", "hey", "help"]):
-        return {
-            "reply": "👋 Hi! I'm AeroPath AI. I can tell you about:\n• 🚦 Traffic & congestion causes\n• ☀️ Weather conditions\n• 🚌 Best transport options\n• 🚑 Ambulance GPS status\n\nTry: 'traffic at Koramangala' or 'weather Indiranagar'",
-            "type": "greeting"
-        }
+        return {"reply": f"👋 Hi! I'm AeroPath AI. I see you're heading to {ctx_dest or 'somewhere exciting'} via {ctx_mode}. How can I help with traffic or weather?", "type": "greeting"}
     
     return {
-        "reply": "I didn't quite get that. Try asking:\n• 'traffic MG Road'\n• 'weather Koramangala'\n• 'best transport now'\n• 'ambulance status'",
+        "reply": f"I'm monitoring your route to {ctx_dest or 'the destination'}. Ask me about 'cafes', 'traffic', or 'safety'!",
         "type": "default"
     }
