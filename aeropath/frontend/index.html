@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AeroPath AI — Smart Mobility Command</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script>
+    // Firebase config — must match login.html
+    const firebaseConfig = {
+      apiKey: "AIzaSyAm4IO7jyOnmtNSOrmyJDb261_Xf8JBUIc",
+      authDomain: "aeropath-ai.firebaseapp.com",
+      projectId: "aeropath-ai",
+      storageBucket: "aeropath-ai.firebasestorage.app",
+      messagingSenderId: "416425822849",
+      appId: "1:416425822849:web:8aa47507788800ea41db80",
+      measurementId: "G-S0W4SZXXSN"
+    };
+    firebase.initializeApp(firebaseConfig);
+
+    // Check auth — redirect if not signed in
+    firebase.auth().onAuthStateChanged(user => {
+      if (!user) {
+        window.location.href = 'login.html';
+      } else {
+        // Refresh token in localStorage
+        user.getIdToken().then(t => localStorage.setItem('aeropath_token', t));
+        localStorage.setItem('user_email', user.email);
+        localStorage.setItem('user_name', user.displayName || user.email);
+      }
+    });
+  </script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <h1><span>🛣</span> AeroPath AI</h1>
+      <span id="data-source-badge">📡 LIVE</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px;">
+      <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-dim);">
+        <input type="checkbox" id="voice-toggle" checked style="accent-color:var(--accent-blue)"/>
+        <label for="voice-toggle">Voice</label>
+      </div>
+      <div id="user-display" style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:8px;">
+        <span id="user-email">admin@aeropath.ai</span>
+        <button onclick="logout()" style="background:transparent;border:1px solid var(--border-color);color:var(--accent-red);padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer;">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="main-container">
+    
+    <!-- LEFT SIDEBAR: ROUTE & INTEL -->
+    <div class="sidebar">
+
+      <!-- SMART ROUTE SEARCH -->
+      <div class="panel map-overlay-panel left-panel">
+        <h2 style="font-weight: 800; letter-spacing: 1px;">AeroPath <span style="color:var(--accent-blue)">AI</span></h2>
+        
+        <div class="input-group">
+          <label id="lbl-from">From</label>
+          <div style="display:flex;gap:5px;">
+            <input type="text" id="route-origin-str" class="input-modern" placeholder="Starting location..." style="flex:1;">
+            <button onclick="startOriginDictation()" id="btn-origin-mic" style="background:transparent;border:1px solid rgba(255,255,255,0.1);color:#8b949e;border-radius:8px;padding:6px 12px;cursor:pointer;transition:0.3s;" title="Voice Input"><i class="fa-solid fa-microphone"></i></button>
+            <button class="btn-icon" title="Refresh Location" onclick="detectLocation()">🔄</button>
+          </div>
+          <input type="hidden" id="route-origin-id">
+        </div>
+
+        <datalist id="junction-options">
+          <option value="MG Road">
+          <option value="Koramangala">
+          <option value="Indiranagar">
+          <option value="Rajajinagar">
+          <option value="HSR Layout">
+        </datalist>
+
+        <div class="input-group" style="margin-top:14px;">
+          <label id="lbl-mode">Transportation Mode</label>
+          <div class="mode-selector">
+             <button class="mode-btn active" onclick="setMode('car')" title="Car">🚗</button>
+             <button class="mode-btn" onclick="setMode('bike')" title="Bike">🚲</button>
+             <button class="mode-btn" onclick="setMode('bus')" title="Bus">🚌</button>
+          </div>
+        </div>
+
+        <div class="input-group" style="margin-top:14px;">
+          <label id="lbl-to">To (Global Search)</label>
+          <div style="display:flex;gap:5px;">
+            <input type="text" id="route-dest-search" class="input-modern" placeholder="Any address worldwide..." oninput="fetchSuggestions(this.value)" autocomplete="off" style="flex:1;">
+            <button onclick="startDestDictation()" id="btn-dest-mic" style="background:transparent;border:1px solid rgba(255,255,255,0.1);color:#8b949e;border-radius:8px;padding:6px 12px;cursor:pointer;transition:0.3s;" title="Voice Input"><i class="fa-solid fa-microphone"></i></button>
+          </div>
+          <div id="dest-autocomplete-list" class="autocomplete-items"></div>
+        </div>
+
+        <button class="btn-primary" id="btn-route" style="margin-top:16px;" onclick="planRouteGlobal()">🗺 Find Shorter Route</button>
+      </div>
+
+      <!-- ROUTE RESULTS -->
+      <div id="route-results-area" style="display:none;">
+        <div class="panel result-panel active-result" style="padding:15px;">
+           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+               <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;">Intelligent Route</div>
+               <span class="badge badge-success" id="top-saving-badge" style="background:#22c55e;color:#000;font-weight:bold;font-size:10px;">-- MIN SAVED</span>
+           </div>
+           
+           <!-- Route A -->
+           <div id="route-card-a" class="route-card selected" onclick="selectRoute(0)">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                 <h4 style="margin:0;font-size:14px;color:var(--accent-blue);">Route A (AeroPath)</h4>
+                 <span class="badge badge-success" style="font-size:9px;background:rgba(34,197,94,0.1);color:#22c55e;">LOW TRAFFIC</span>
+              </div>
+              <div style="font-size:12px;margin-top:5px;color:#fff;">
+                 <span id="route-a-time" style="font-size:18px;font-weight:800;">-- min</span> 
+                 <span style="color:var(--text-dim);"> • <span id="route-a-dist">-- km</span></span>
+              </div>
+           </div>
+
+           <!-- Route B -->
+           <div id="route-card-b" class="route-card" onclick="selectRoute(1)" style="margin-top:10px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                 <h4 style="margin:0;font-size:14px;color:var(--text-dim);">Route B (Standard)</h4>
+                 <span class="badge" id="route-b-badge" style="font-size:9px;background:rgba(239,68,68,0.1);color:#ef4444;">HIGH TRAFFIC</span>
+              </div>
+              <div style="font-size:12px;margin-top:5px;color:#fff;">
+                 <span id="route-b-time" style="font-size:18px;font-weight:800;">-- min</span> 
+                 <span style="color:var(--text-dim);"> • <span id="route-b-dist">-- km</span></span>
+              </div>
+           </div>
+
+           <div class="reason-box" style="margin-top:15px;background:rgba(0,0,0,0.2);">
+              <div class="reason-label">PROPER REASON</div>
+              <div id="route-reason">Analyzing real-time node telemetry...</div>
+           </div>
+
+           <button class="btn-primary" id="btn-traffic-spike" style="margin-top:12px;width:100%;font-size:11px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.4);" onclick="triggerTrafficSpike()"><i class="fa-solid fa-triangle-exclamation"></i> Simulate Traffic Spike</button>
+        </div>
+      </div>
+
+      <!-- NODE PERFORMANCE -->
+      <div class="panel" style="flex:1; overflow:auto;">
+        <div class="panel-header"><h3>Network Nodes</h3></div>
+        <div id="junction-list" class="junction-grid-compact">Loading telemetry...</div>
+      </div>
+
+    </div>
+
+    <!-- CENTER: THE LIVE MAP -->
+    <div class="map-container">
+      <div id="map"></div>
+      
+      <!-- TOP OVERLAYS -->
+      <div class="map-overlay-top" style="display: flex; align-items: center;">
+        <div id="clock" style="margin-right:8px;">--:--:--</div>
+        <div id="peak-timing-alert" style="padding: 4px 10px; background: rgba(234,179,8,0.15); border: 1px solid rgba(234,179,8,0.4); color: #eab308; border-radius: 12px; font-weight: 600; font-size: 11px; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+          <i class="fa-solid fa-clock-rotate-left"></i> <span id="peak-traffic-text">Peak Traffic: 5:00 PM - 8:00 PM</span>
+        </div>
+        <div id="active-ambulance-alert" style="display:none; margin-left:8px;">
+          🚑 EMERGENCY: Preemption Active
+        </div>
+      </div>
+
+      <!-- BOTTOM OVERLAYS (TELEMETRY) -->
+      <div class="telemetry-bar">
+        <div class="tel-item"><span class="label">AVG DENSITY</span><span class="val" id="density-val">--%</span></div>
+        <div class="tel-item"><span class="label">NODES</span><span class="val">5/5</span></div>
+        <div class="tel-item"><span class="label">TELEMETRY</span><span class="val val-green" id="ingest-status">● STREAMING</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLLAPSIBLE WIDGETS (Tabbed Panel) -->
+  <div id="widget-tray">
+     <button class="widget-btn" onclick="toggleWidget('chatbot')">💬 AI</button>
+     <button class="widget-btn" onclick="toggleWidget('telemetry')">📡 LOG</button>
+     <button class="widget-btn" onclick="toggleWidget('forecast')">🔮 FC</button>
+  </div>
+
+  <div id="widget-panel" class="panel glass-floating" style="display:none;">
+    <div class="panel-header">
+      <h3 id="widget-title">Widget</h3>
+      <button onclick="toggleWidget()" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;">✕</button>
+    </div>
+    <div id="widget-content"></div>
+  </div>
+
+  <div id="lang-switcher">
+     <button onclick="setLang('en')">EN</button>
+     <button onclick="setLang('hi')">HI</button>
+     <button onclick="setLang('kn')">KN</button>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+  <script>
+    const API = "http://localhost:5000";
+    const markers = {};
+    let ambulanceMarker = null;
+    let routeChart = null;
+    let currentPath = null;
+    let routingControl = null;
+    let currentMode = 'car';
+    let currentLang = 'en';
+
+    const translations = {
+      en: { title:"AeroPath AI", find:"Find Shorter Route", from:"From (Auto-detected)", to:"To (Global Search)", mode:"Transportation Mode", saved:"min saved", reason:"PROPER REASON" },
+      hi: { title:"एयरोपाथ AI", find:"छोटा रास्ता खोजें", from:"से (स्वचालित)", to:"तक (वैश्विक खोज)", mode:"परिवहन मोड", saved:"मिनट बचाए", reason:"उचित कारण" },
+      kn: { title:"ಏರೋಪಾತ್ AI", find:"ಸಣ್ಣ ಮಾರ್ಗ ಪತ್ತೆ ಮಾಡಿ", from:"ಇಂದ (ಸ್ವಯಂಚಾಲಿತ)", to:"ವರೆಗೆ (ಜಾಗತಿಕ ಹುಡುಕಾಟ)", mode:"ಸಾರಿಗೆ ವಿಧಾನ", saved:"ನಿಮಿಷ ಉಳಿಸಲಾಗಿದೆ", reason:"ಸರಿಯಾದ ಕಾರಣ" }
+    };
+
+    function setLang(lang) {
+      currentLang = lang;
+      const t = translations[lang];
+      document.querySelector('h1 span').nextSibling.textContent = " " + t.title;
+      document.getElementById('lbl-mode').textContent = t.mode;
+      document.getElementById('lbl-to').textContent = t.to;
+      document.getElementById('btn-route').textContent = "🗺 " + t.find;
+      document.querySelectorAll('#lang-switcher button').forEach(b => b.classList.toggle('active', b.onclick.toString().includes(lang)));
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.title.toLowerCase() === mode));
+      speak(`Mode changed to ${mode}`);
+    }
+
+    // --- AUTOCOMPLETE ---
+    let debounceTimer;
+    async function fetchSuggestions(query) {
+      const list = document.getElementById("dest-autocomplete-list");
+      if (!query || query.length < 3) { list.innerHTML = ""; return; }
+
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+          const data = await res.json();
+          
+          list.innerHTML = "";
+          data.forEach(item => {
+            const div = document.createElement("div");
+            const mainText = item.display_name.split(',')[0];
+            const subText = item.display_name.split(',').slice(1).join(',').substring(0, 60);
+            div.innerHTML = `<strong>${mainText}</strong><br><small style="color:#8b949e">${subText}...</small>`;
+            
+            // On click, set input value and clear suggestions
+            div.onclick = function() {
+              document.getElementById("route-dest-search").value = item.display_name;
+              list.innerHTML = "";
+            };
+            list.appendChild(div);
+          });
+        } catch(err) { console.error("Autocomplete error:", err); }
+      }, 400); // 400ms debounce typing
+    }
+
+    // Close autocomplete when clicking outside
+    document.addEventListener("click", function(e) {
+      if(e.target.id !== "route-dest-search") {
+        const list = document.getElementById("dest-autocomplete-list");
+        if(list) list.innerHTML = "";
+      }
+    });
+
+    // --- PEAK TIMING ---
+    function checkPeakTiming() {
+      const hour = new Date().getHours();
+      const ptText = document.getElementById("peak-traffic-text");
+      const ptAlert = document.getElementById("peak-timing-alert");
+      if(!ptText || !ptAlert) return;
+      
+      if (hour >= 8 && hour < 11) {
+        ptText.innerHTML = "Morning Rush: Heavy Traffic";
+        ptAlert.style.background = "rgba(239,68,68,0.15)";
+        ptAlert.style.borderColor = "rgba(239,68,68,0.4)";
+        ptAlert.style.color = "#ef4444";
+      } else if (hour >= 17 && hour < 20) {
+        ptText.innerHTML = "Evening Rush: Heavy Traffic";
+        ptAlert.style.background = "rgba(239,68,68,0.15)";
+        ptAlert.style.borderColor = "rgba(239,68,68,0.4)";
+        ptAlert.style.color = "#ef4444";
+      } else {
+        const nextPeak = (hour < 8) ? "8:00 AM" : ((hour < 17) ? "5:00 PM" : "Tomorrow 8:00 AM");
+        ptText.innerHTML = "Clear. Next Peak: " + nextPeak;
+        ptAlert.style.background = "rgba(34,197,94,0.15)";
+        ptAlert.style.borderColor = "rgba(34,197,94,0.4)";
+        ptAlert.style.color = "#22c55e";
+      }
+    }
+    setInterval(checkPeakTiming, 60000);
+    setTimeout(checkPeakTiming, 1000);
+
+    // --- GEOLOCATION ---
+    function detectLocation() {
+      const originEl = document.getElementById("route-origin-str");
+      originEl.value = "Detecting location...";
+      if(navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+          const lat = pos.coords.latitude, lng = pos.coords.longitude;
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`).then(r=>r.json());
+          const name = res.display_name.split(',')[0] || "Current Location";
+          originEl.value = name;
+          originEl.dataset.lat = lat; originEl.dataset.lng = lng;
+          speak(`Location detected at ${name}`);
+        }, () => {
+          originEl.value = "MG Road, Bengaluru";
+          originEl.dataset.lat = 12.9716; originEl.dataset.lng = 77.5946;
+        });
+      }
+    }
+
+    // --- GLOBAL ROUTING ---
+    async function planRouteGlobal() {
+      const originEl = document.getElementById("route-origin-str");
+      const destStr = document.getElementById("route-dest-search").value;
+      if(!destStr) { alert("Please enter a destination"); return; }
+
+      // 1. Geocode Destination
+      const destRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destStr)}`).then(r=>r.json());
+      if(!destRes.length) { alert("Destination not found"); return; }
+      const dest = destRes[0];
+
+      // 1b. Ensure Origin is geocoded
+      let startLat = originEl.dataset.lat, startLng = originEl.dataset.lng;
+      if(!startLat) {
+        const originRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(originEl.value)}`).then(r=>r.json());
+        if(originRes.length) { startLat = originRes[0].lat; startLng = originRes[0].lon; }
+        else { startLat = 12.9716; startLng = 77.5946; } // Default MG Road
+      }
+
+      const start = L.latLng(startLat, startLng);
+      const end = L.latLng(dest.lat, dest.lon);
+
+      if(routingControl) map.removeControl(routingControl);
+      
+      routingControl = L.Routing.control({
+        waypoints: [start, end],
+        lineOptions: { styles: [{ color: '#1a73e8', weight: 6, opacity: 0.8 }] },
+        createMarker: function(i, wp, nWps) {
+          const char = i === 0 ? 'A' : (i === nWps - 1 ? 'B' : '');
+          if (!char) return null;
+          const bg = i === 0 ? '#1a73e8' : '#ef4444';
+          const html = `<div style="background:${bg};color:#fff;width:24px;height:24px;border-radius:50%;text-align:center;line-height:24px;font-weight:bold;font-size:12px;border:2px solid #fff;box-shadow:0 0 10px rgba(0,0,0,0.5);">${char}</div>`;
+          return L.marker(wp.latLng, { icon: L.divIcon({className:'', html:html, iconAnchor:[12,12]}) });
+        }
+      }).addTo(map);
+
+      routingControl.on('routesfound', function(e) {
+        window.currentRoutes = e.routes;
+        const routeA = e.routes[0];
+        const distKm = (routeA.summary.totalDistance / 1000).toFixed(1);
+        let timeMin = Math.round(routeA.summary.totalTime / 60);
+        
+        // Mode adjustments
+        if(currentMode === 'bike') timeMin = Math.round(timeMin * 0.8);
+        if(currentMode === 'bus') timeMin = Math.round(timeMin * 1.4);
+
+        // Populate Route A (Optimal)
+        document.getElementById("route-results-area").style.display = "block";
+        document.getElementById("route-a-dist").textContent = distKm + " km";
+        document.getElementById("route-a-time").textContent = timeMin + " min";
+        
+        // Simulate Route B (Standard/Congested)
+        const timeB = Math.round(timeMin * 1.25) + 3; // Slower
+        const distB = (parseFloat(distKm) * 1.05).toFixed(1); // Slightly longer
+        document.getElementById("route-b-dist").textContent = distB + " km";
+        document.getElementById("route-b-time").textContent = timeB + " min";
+        document.getElementById("route-b-badge").textContent = "HIGH TRAFFIC";
+        document.getElementById("route-b-badge").style.background = "rgba(239,68,68,0.1)";
+        document.getElementById("route-b-badge").style.color = "#ef4444";
+
+        const saved = timeB - timeMin;
+        document.getElementById("top-saving-badge").textContent = saved + " MIN SAVED";
+        document.getElementById("route-reason").innerHTML = "<b>AeroPath AI</b> routed you around <span style='color:#ef4444;'>Level 4 congestion</span> on the primary arterial road, saving " + saved + " minutes.";
+        
+        speak(`Found optimal route. Saving ${saved} minutes compared to standard traffic.`);
+        
+        // Ensure Route A is visually selected initially
+        selectRoute(0);
+      });
+    }
+
+    function selectRoute(idx) {
+      document.querySelectorAll('.route-card').forEach((el, i) => {
+        if(i === idx) {
+          el.classList.add('selected');
+          el.style.border = idx === 0 ? "1px solid var(--accent-blue)" : "1px solid #ef4444";
+          el.style.background = idx === 0 ? "rgba(26,115,232,0.1)" : "rgba(239,68,68,0.1)";
+        } else {
+          el.classList.remove('selected');
+          el.style.border = "1px solid rgba(255,255,255,0.05)";
+          el.style.background = "transparent";
+        }
+      });
+      // Visually hack the Leaflet path color for the demo
+      const lines = document.querySelectorAll('path.leaflet-interactive');
+      lines.forEach(line => {
+        if(line.getAttribute('stroke') === '#1a73e8' || line.getAttribute('stroke') === '#ef4444') {
+          line.setAttribute('stroke', idx === 0 ? '#1a73e8' : '#ef4444');
+        }
+      });
+    }
+
+    function triggerTrafficSpike() {
+      selectRoute(1);
+      document.getElementById("route-reason").innerHTML = "<i class='fa-solid fa-bolt' style='color:#eab308;'></i> <b>TRAFFIC SPIKE DETECTED</b>. AeroPath AI has dynamically re-routed you, avoiding a sudden congestion surge on Route A.";
+      
+      const routeABadge = document.querySelector("#route-card-a .badge");
+      routeABadge.textContent = "CONGESTED";
+      routeABadge.style.background = "rgba(239,68,68,0.1)";
+      routeABadge.style.color = "#ef4444";
+
+      const routeBBadge = document.getElementById("route-b-badge");
+      routeBBadge.textContent = "OPTIMAL NOW";
+      routeBBadge.style.background = "rgba(34,197,94,0.1)";
+      routeBBadge.style.color = "#22c55e";
+
+      speak("Alert. Traffic spike detected ahead. System is dynamically rerouting to avoid congestion.");
+    }
+
+    // --- INIT ---
+    document.getElementById('user-email').textContent = localStorage.getItem('user_email') || 'admin';
+    const map = L.map("map",{zoomControl:false}).setView([12.965,77.595],13);
+    L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", { attribution: "&copy; Google Maps" }).addTo(map);
+    detectLocation();
+    setLang('en');
+
+    function logout() { firebase.auth().signOut().then(() => { localStorage.clear(); window.location.href='login.html'; }); }
+
+    // --- CHATBOT ENHANCEMENT ---
+    async function chat(presetMsg) {
+      const msg = presetMsg || document.getElementById("cm").value;
+      if(!msg) return;
+      document.getElementById("cr").innerHTML = "<i>AI is thinking...</i>";
+      
+      // Feed context: current destination and mode
+      const dest = document.getElementById("route-dest-search").value;
+      const context = `(User is traveling to ${dest || 'unknown'} via ${currentMode})`;
+      
+      const res = await fetch(API+"/api/chat", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ message: msg + " " + context })
+      }).then(r=>r.json());
+      
+      document.getElementById("cr").innerHTML = `<b>AI:</b> ${res.reply}`;
+      
+      // Add suggestion chips
+      if(dest) {
+        document.getElementById("cr").innerHTML += `<div class="chips">
+          <button onclick="chat('Suggest cafes near ${dest}')">☕ Cafes</button>
+          <button onclick="chat('Is ${currentMode} safe for this route?')">🛡 Safety</button>
+        </div>`;
+      }
+    }
+    // --- DATA UPDATES ---
+    async function updateData() {
+      const data = await fetch(API+"/api/dashboard/data").then(r=>r.json());
+      document.getElementById("clock").textContent = new Date().toLocaleTimeString();
+      document.getElementById("density-val").textContent = Math.floor(Math.random()*30 + 40) + "%";
+      
+      let html = "";
+      data.junctions.forEach(j => {
+        const col = j.congestion === 'HIGH' ? '#f85149' : (j.congestion === 'MEDIUM' ? '#d29922' : '#3fb950');
+        if(markers[j.id]) {
+          markers[j.id].setStyle({color: col, fillColor: col});
+        } else {
+          markers[j.id] = L.circleMarker([j.lat, j.lng], {radius: 12, weight: 2, color: col, fillColor: col, fillOpacity: 0.6})
+            .addTo(map).bindPopup(`<b>${j.name}</b><br>${j.weather.icon} ${j.weather.condition}<br>📌 ${j.intel.cause}`);
+        }
+        html += `<div class="junction-pill" style="border-left: 3px solid ${col}">
+                   <div class="j-name">${j.name}</div>
+                   <div class="j-stat">${j.weather.icon} ${j.weather.temperature_c}°C</div>
+                 </div>`;
+      });
+      document.getElementById("junction-list").innerHTML = html;
+
+      // Ambulance
+      if(data.ambulance && data.ambulance.lat) {
+        if(!ambulanceMarker) {
+          ambulanceMarker = L.marker([data.ambulance.lat, data.ambulance.lng], {
+            icon: L.divIcon({html: "<div class='amb-icon'>🚑</div>", className: ""})
+          }).addTo(map);
+        } else {
+          ambulanceMarker.setLatLng([data.ambulance.lat, data.ambulance.lng]);
+        }
+        document.getElementById("active-ambulance-alert").style.display = data.ambulance.active ? "block" : "none";
+      }
+    }
+
+    // --- WIDGETS ---
+    function toggleWidget(type) {
+      const panel = document.getElementById("widget-panel");
+      if(!type || panel.dataset.current === type) {
+        panel.style.display = "none";
+        panel.dataset.current = "";
+        return;
+      }
+      panel.style.display = "flex";
+      panel.dataset.current = type;
+      document.getElementById("widget-title").textContent = type.toUpperCase();
+      let content = "";
+      if(type === 'telemetry') {
+        content = '<div id="log-con" class="console"></div>';
+        fetch(API+"/api/telemetry/log").then(r=>r.json()).then(logs => {
+          document.getElementById("log-con").innerHTML = logs.map(l => `[${l.timestamp}] ${l.source}: ${l.payload}`).join('<br>');
+        });
+      } else if(type === 'forecast') {
+        content = '<div id="fc-area">Loading...</div>';
+      } else if(type === 'chatbot') {
+        content = '<div class="chat-simple"><div style="display:flex;gap:5px;"><input id="cm" placeholder="Ask AI..." style="flex:1;"><button onclick="startDictation()" id="btn-mic" style="background:transparent;border:1px solid rgba(255,255,255,0.1);color:#8b949e;border-radius:8px;padding:6px 12px;cursor:pointer;transition:0.3s;" title="Voice Input"><i class="fa-solid fa-microphone"></i></button><button onclick="chat()">➤</button></div><div id="cr"></div></div>';
+      }
+      document.getElementById("widget-content").innerHTML = content;
+    }
+
+    // --- VOICE TO TEXT ---
+    function startDictation() {
+      if (window.hasOwnProperty('webkitSpeechRecognition')) {
+        const recognition = new webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = currentLang === 'hi' ? "hi-IN" : (currentLang === 'kn' ? "kn-IN" : "en-US");
+        
+        const micBtn = document.getElementById('btn-mic');
+        micBtn.style.color = "#ef4444";
+        micBtn.style.borderColor = "#ef4444";
+        
+        recognition.start();
+
+        recognition.onresult = function(e) {
+          document.getElementById('cm').value = e.results[0][0].transcript;
+          recognition.stop();
+          micBtn.style.color = "#8b949e";
+          micBtn.style.borderColor = "rgba(255,255,255,0.1)";
+          chat(); // Auto-send
+        };
+
+        recognition.onerror = function(e) {
+          recognition.stop();
+          micBtn.style.color = "#8b949e";
+          micBtn.style.borderColor = "rgba(255,255,255,0.1)";
+        }
+      } else {
+        alert("Voice recognition is not supported in this browser.");
+      }
+    }
+
+    function startDestDictation() {
+      if (window.hasOwnProperty('webkitSpeechRecognition')) {
+        const recognition = new webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = currentLang === 'hi' ? "hi-IN" : (currentLang === 'kn' ? "kn-IN" : "en-US");
+        
+        const micBtn = document.getElementById('btn-dest-mic');
+        micBtn.style.color = "#ef4444";
+        micBtn.style.borderColor = "#ef4444";
+        
+        recognition.start();
+
+        recognition.onresult = function(e) {
+          document.getElementById('route-dest-search').value = e.results[0][0].transcript;
+          recognition.stop();
+          micBtn.style.color = "#8b949e";
+          micBtn.style.borderColor = "rgba(255,255,255,0.1)";
+          fetchSuggestions(e.results[0][0].transcript); // Auto-fetch suggestions
+        };
+
+        recognition.onerror = function(e) {
+          recognition.stop();
+          micBtn.style.color = "#8b949e";
+          micBtn.style.borderColor = "rgba(255,255,255,0.1)";
+        }
+      } else {
+        alert("Voice recognition is not supported in this browser.");
+      }
+    }
+
+    function startOriginDictation() {
+      if (window.hasOwnProperty('webkitSpeechRecognition')) {
+        const recognition = new webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = currentLang === 'hi' ? "hi-IN" : (currentLang === 'kn' ? "kn-IN" : "en-US");
+        
+        const micBtn = document.getElementById('btn-origin-mic');
+        micBtn.style.color = "#ef4444";
+        micBtn.style.borderColor = "#ef4444";
+        
+        recognition.start();
+
+        recognition.onresult = function(e) {
+          const originEl = document.getElementById('route-origin-str');
+          originEl.value = e.results[0][0].transcript;
+          // Clear geocoded dataset so it forces a re-geocode on the new natural string
+          delete originEl.dataset.lat;
+          delete originEl.dataset.lng;
+          
+          recognition.stop();
+          micBtn.style.color = "#8b949e";
+          micBtn.style.borderColor = "rgba(255,255,255,0.1)";
+        };
+
+        recognition.onerror = function(e) {
+          recognition.stop();
+          micBtn.style.color = "#8b949e";
+          micBtn.style.borderColor = "rgba(255,255,255,0.1)";
+        }
+      } else {
+        alert("Voice recognition is not supported in this browser.");
+      }
+    }
+
+    function speak(t) { if(document.getElementById("voice-toggle").checked) speechSynthesis.speak(new SpeechSynthesisUtterance(t)); }
+    setInterval(updateData, 5000);
+    updateData();
+  </script>
+</body>
+</html>

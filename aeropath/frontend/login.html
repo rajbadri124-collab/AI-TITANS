@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AeroPath Login — Traffic Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #05070a;
+      --accent-blue: #58a6ff;
+      --text-main: #e6edf3;
+      --text-dim: #8b949e;
+      --border: rgba(48, 54, 61, 0.5);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-color);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      background-image: radial-gradient(circle at 50% 50%, rgba(88, 166, 255, 0.05) 0%, transparent 70%);
+    }
+    .login-container {
+      background: rgba(13, 17, 23, 0.8);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      padding: 40px;
+      border-radius: 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      text-align: center;
+      animation: fadeIn 0.8s ease-out;
+    }
+    @keyframes fadeIn { from{opacity:0; transform:translateY(20px)} to{opacity:1; transform:translateY(0)} }
+    
+    .logo {
+      font-size: 32px;
+      font-weight: 800;
+      background: linear-gradient(90deg, #58a6ff, #bc8cff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+    .tagline { font-size: 13px; color: var(--text-dim); margin-bottom: 32px; letter-spacing: 0.5px; }
+    
+    .input-group { text-align: left; margin-bottom: 16px; }
+    label { display: block; font-size: 11px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; font-weight: 600; letter-spacing: 1px; }
+    input {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus { border-color: var(--accent-blue); }
+    
+    .btn-login {
+      width: 100%;
+      padding: 14px;
+      background: var(--accent-blue);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn-login:hover { opacity: 0.9; }
+    .btn-login:active { transform: scale(0.98); }
+    .btn-login:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .footer-links { margin-top: 24px; font-size: 12px; color: var(--text-dim); }
+    .footer-links span { color: var(--accent-blue); cursor: pointer; font-weight: 600; }
+    
+    .tabs { display: flex; background: rgba(255,255,255,0.05); border-radius: 12px; margin-bottom: 24px; overflow: hidden; }
+    .tab { flex: 1; padding: 12px; text-align: center; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--text-dim); transition: 0.3s; }
+    .tab.active { background: var(--accent-blue); color: #fff; }
+
+    /* Mode toggle (Sign In / Sign Up) */
+    .mode-toggle { display: flex; margin-bottom: 20px; gap: 8px; }
+    .mode-btn { flex: 1; padding: 10px; text-align: center; font-size: 12px; font-weight: 600; cursor: pointer; 
+                color: var(--text-dim); background: rgba(255,255,255,0.04); border: 1px solid var(--border); 
+                border-radius: 10px; transition: 0.3s; text-transform: uppercase; letter-spacing: 1px; }
+    .mode-btn.active { background: rgba(88, 166, 255, 0.15); color: var(--accent-blue); border-color: rgba(88, 166, 255, 0.4); }
+
+    /* Form Fields Container */
+    .form-section { display: none; text-align: left; }
+    .form-section.active { display: block; animation: slideIn 0.3s forwards; }
+    @keyframes slideIn { from{opacity:0; transform:translateX(-10px)} to{opacity:1; transform:translateX(0)} }
+
+    /* Error / Success messages */
+    .msg { padding: 10px 14px; border-radius: 10px; font-size: 12px; margin-bottom: 16px; display: none; }
+    .msg.error { background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); display: block; }
+    .msg.success { background: rgba(34, 197, 94, 0.1); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); display: block; }
+
+    /* Spinner */
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 8px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <div class="login-container">
+    <div class="logo">AeroPath AI</div>
+    <p class="tagline">URBAN TRAFFIC INTELLIGENCE COMMAND</p>
+    
+    <!-- Tab Controls -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('user')">Private User</div>
+      <div class="tab" onclick="switchTab('ambulance')">Ambulance Driver</div>
+    </div>
+
+    <!-- Sign In / Sign Up Toggle -->
+    <div class="mode-toggle">
+      <div class="mode-btn active" id="mode-signin" onclick="switchMode('signin')">Sign In</div>
+      <div class="mode-btn" id="mode-signup" onclick="switchMode('signup')">Sign Up</div>
+    </div>
+
+    <!-- Message Area -->
+    <div id="auth-msg" class="msg"></div>
+
+    <!-- User Form -->
+    <div id="form-user" class="form-section active">
+      <div class="input-group" id="group-u-name" style="display:none;">
+        <label>Full Name</label>
+        <input type="text" id="u-name" placeholder="John Doe">
+      </div>
+      <div class="input-group">
+        <label>Email Address</label>
+        <input type="email" id="u-email" placeholder="name@company.com">
+      </div>
+      <div class="input-group">
+        <label>Password</label>
+        <input type="password" id="u-pass" placeholder="••••••••" minlength="6">
+      </div>
+    </div>
+
+    <!-- Ambulance Form -->
+    <div id="form-ambulance" class="form-section">
+      <div class="input-group" id="group-a-dname" style="display:none;">
+        <label>Driver Name</label>
+        <input type="text" id="a-name" placeholder="Agent 47">
+      </div>
+      <div class="input-group">
+        <label>Ambulance Registration No.</label>
+        <input type="text" id="a-num" placeholder="KA-01-AM-1080">
+      </div>
+      <div class="input-group">
+        <label>Passcode (min 6 chars)</label>
+        <input type="password" id="a-pass" placeholder="••••••••" minlength="6">
+      </div>
+    </div>
+    
+    <button class="btn-login" id="btn-submit" onclick="handleAuth()">Sign In</button>
+    
+    <div class="footer-links">
+      <span id="toggle-text" onclick="switchMode(currentMode === 'signin' ? 'signup' : 'signin')">
+        Don't have an account? <strong>Sign Up</strong>
+      </span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- Firebase SDK (Compat – works with simple script tags)              -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+
+  <script>
+    // ╔═══════════════════════════════════════════════════════════════════╗
+    // ║  🔥  PASTE YOUR FIREBASE CONFIG BELOW  🔥                       ║
+    // ║  Get it from: Firebase Console → Project Settings → General     ║
+    // ║  → Your apps → Firebase SDK snippet → Config                    ║
+    // ╚═══════════════════════════════════════════════════════════════════╝
+    const firebaseConfig = {
+      apiKey: "AIzaSyAm4IO7jyOnmtNSOrmyJDb261_Xf8JBUIc",
+      authDomain: "aeropath-ai.firebaseapp.com",
+      projectId: "aeropath-ai",
+      storageBucket: "aeropath-ai.firebasestorage.app",
+      messagingSenderId: "416425822849",
+      appId: "1:416425822849:web:8aa47507788800ea41db80",
+      measurementId: "G-S0W4SZXXSN"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+
+    // ── State ──────────────────────────────────────────────────────────
+    let currentRole = 'user';
+    let currentMode = 'signin';  // 'signin' or 'signup'
+
+    // ── Tab Switch (User / Ambulance) ──────────────────────────────────
+    function switchTab(role) {
+      currentRole = role;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.form-section').forEach(f => f.classList.remove('active'));
+      event.target.classList.add('active');
+      document.getElementById('form-' + role).classList.add('active');
+      clearMsg();
+    }
+
+    // ── Mode Switch (Sign In / Sign Up) ────────────────────────────────
+    function switchMode(mode) {
+      currentMode = mode;
+      document.getElementById('mode-signin').classList.toggle('active', mode === 'signin');
+      document.getElementById('mode-signup').classList.toggle('active', mode === 'signup');
+      
+      // Show/hide name fields (only for sign up)
+      const showName = mode === 'signup';
+      document.getElementById('group-u-name').style.display = showName ? 'block' : 'none';
+      document.getElementById('group-a-dname').style.display = showName ? 'block' : 'none';
+      
+      // Update button text
+      document.getElementById('btn-submit').textContent = mode === 'signin' ? 'Sign In' : 'Create Account';
+      
+      // Update footer text
+      document.getElementById('toggle-text').innerHTML = mode === 'signin' 
+        ? "Don't have an account? <strong>Sign Up</strong>"
+        : "Already have an account? <strong>Sign In</strong>";
+      
+      clearMsg();
+    }
+
+    // ── Message Helpers ────────────────────────────────────────────────
+    function showMsg(text, type) {
+      const el = document.getElementById('auth-msg');
+      el.textContent = text;
+      el.className = 'msg ' + type;
+    }
+    function clearMsg() {
+      const el = document.getElementById('auth-msg');
+      el.className = 'msg';
+      el.textContent = '';
+    }
+
+    // ── Main Auth Handler ──────────────────────────────────────────────
+    async function handleAuth() {
+      clearMsg();
+      const btn = document.getElementById('btn-submit');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Processing...';
+
+      try {
+        let email, password, displayName;
+
+        if (currentRole === 'user') {
+          email = document.getElementById('u-email').value.trim();
+          password = document.getElementById('u-pass').value;
+          displayName = document.getElementById('u-name').value.trim() || email;
+        } else {
+          // Ambulance: create email from registration number
+          const regNum = document.getElementById('a-num').value.trim();
+          password = document.getElementById('a-pass').value;
+          displayName = document.getElementById('a-name').value.trim() || regNum;
+          
+          if (!regNum) { throw new Error("Please enter the Ambulance Registration Number."); }
+          // Convert reg number to a valid email format
+          email = regNum.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + '@aeropath.ambulance';
+        }
+
+        // Validate
+        if (!email) throw new Error("Please enter your email address.");
+        if (!password || password.length < 6) throw new Error("Password must be at least 6 characters.");
+
+        let userCredential;
+
+        if (currentMode === 'signup') {
+          // ── SIGN UP ──────────────────────────────────────────────
+          userCredential = await auth.createUserWithEmailAndPassword(email, password);
+          
+          // Set display name
+          await userCredential.user.updateProfile({ displayName: displayName });
+          
+          // Set role via backend
+          const idToken = await userCredential.user.getIdToken();
+          await fetch('/api/auth/set-role', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken, role: currentRole })
+          });
+
+          showMsg('Account created successfully! Redirecting...', 'success');
+
+        } else {
+          // ── SIGN IN ──────────────────────────────────────────────
+          userCredential = await auth.signInWithEmailAndPassword(email, password);
+          showMsg('Signed in! Redirecting...', 'success');
+        }
+
+        // Store auth data for other pages
+        const idToken = await userCredential.user.getIdToken();
+        localStorage.setItem('aeropath_auth', 'true');
+        localStorage.setItem('aeropath_role', currentRole);
+        localStorage.setItem('aeropath_token', idToken);
+        localStorage.setItem('user_email', userCredential.user.email);
+        localStorage.setItem('user_name', userCredential.user.displayName || email);
+
+        // Animated redirect
+        document.body.style.opacity = '0';
+        document.body.style.transition = 'opacity 0.5s';
+        setTimeout(() => { window.location.href = 'index.html'; }, 600);
+
+      } catch (err) {
+        // Map Firebase error codes to friendly messages
+        let msg = err.message;
+        if (err.code === 'auth/email-already-in-use') msg = 'This email is already registered. Please sign in.';
+        else if (err.code === 'auth/invalid-email') msg = 'Please enter a valid email address.';
+        else if (err.code === 'auth/user-not-found') msg = 'No account found with this email. Please sign up.';
+        else if (err.code === 'auth/wrong-password') msg = 'Incorrect password. Please try again.';
+        else if (err.code === 'auth/weak-password') msg = 'Password is too weak. Use at least 6 characters.';
+        else if (err.code === 'auth/too-many-requests') msg = 'Too many attempts. Please wait a moment and try again.';
+        else if (err.code === 'auth/invalid-credential') msg = 'Invalid credentials. Check your email and password.';
+        
+        showMsg(msg, 'error');
+        btn.disabled = false;
+        btn.textContent = currentMode === 'signin' ? 'Sign In' : 'Create Account';
+      }
+    }
+
+    // If already signed in, redirect to main page
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        user.getIdToken().then(token => {
+          localStorage.setItem('aeropath_auth', 'true');
+          localStorage.setItem('aeropath_token', token);
+          localStorage.setItem('user_email', user.email);
+          localStorage.setItem('user_name', user.displayName || user.email);
+          window.location.href = 'index.html';
+        });
+      }
+    });
+  </script>
+</body>
+</html>
