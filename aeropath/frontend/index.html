@@ -124,6 +124,24 @@
               </div>
            </div>
 
+           <!-- MODE COMPARISON TABLE -->
+           <div id="mode-comparison" class="panel" style="margin-top:15px;padding:12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05);border-radius:12px;">
+             <div style="font-size:10px;font-weight:700;color:var(--accent-blue);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;"><i class="fa-solid fa-list-check"></i> Mode comparison</div>
+             <table style="width:100%;font-size:11px;border-collapse:collapse;">
+               <thead>
+                 <tr style="text-align:left;border-bottom:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.5);">
+                   <th style="padding-bottom:5px;">Mode</th>
+                   <th style="padding-bottom:5px;">Est. Time</th>
+                   <th style="padding-bottom:5px;">Status</th>
+                 </tr>
+               </thead>
+               <tbody id="mode-tbody">
+                 <!-- JS Injected -->
+               </tbody>
+             </table>
+             <div id="best-mode-badge" style="margin-top:10px;padding:6px;border-radius:6px;font-size:11px;font-weight:700;text-align:center;display:none;"></div>
+           </div>
+
            <div class="reason-box" style="margin-top:15px;background:rgba(0,0,0,0.2);">
               <div class="reason-label">PROPER REASON</div>
               <div id="route-reason">Analyzing real-time node telemetry...</div>
@@ -201,8 +219,8 @@
 
     const translations = {
       en: { title:"AeroPath AI", find:"Find Shorter Route", from:"From (Auto-detected)", to:"To (Global Search)", mode:"Transportation Mode", saved:"min saved", reason:"PROPER REASON" },
-      hi: { title:"एयरोपाथ AI", find:"छोटा रास्ता खोजें", from:"से (स्वचालित)", to:"तक (वैश्विक खोज)", mode:"परिवहन मोड", saved:"मिनट बचाए", reason:"उचित कारण" },
-      kn: { title:"ಏರೋಪಾತ್ AI", find:"ಸಣ್ಣ ಮಾರ್ಗ ಪತ್ತೆ ಮಾಡಿ", from:"ಇಂದ (ಸ್ವಯಂಚಾಲಿತ)", to:"ವರೆಗೆ (ಜಾಗತಿಕ ಹುಡುಕಾಟ)", mode:"ಸಾರಿಗೆ ವಿಧಾನ", saved:"ನಿಮಿಷ ಉಳಿಸಲಾಗಿದೆ", reason:"ಸರಿಯಾದ ಕಾರಣ" }
+      hi: { title:"एयरोपाथ AI", find:"छोटा راستہ खोजें", from:"से (स्वचालित)", to:"तक (वैश्विक खोज)", mode:"परिवहन मोड", saved:"ಮಿನುಟ್‌ ಬಚಾಯೆ", reason:"ಉಚಿತ ಕಾರಣ" },
+      kn: { title:"ಏರೋಪಾತ್ AI", find:"ಸಣ್ಣ ಮಾರ್ಗ ಪತ್ತೆ ಮಾಡಿ", from:"ಇಂದ (ಸ್ವಯಂಚಾಲಿತ)", to:"ವರೆಗೆ (ಜಾಗತಿಕ ಹುಡುಕಾಟ)", mode:"ಸಾರಿಗೆ ವಿವರ", saved:"ನಿಮಿಷ ಉಳಿಸಲಾಗಿದೆ", reason:"ಸರಿಯಾದ ಕಾರಣ" }
     };
 
     function setLang(lang) {
@@ -385,6 +403,43 @@
         // Ensure Route A is visually selected initially
         selectRoute(0);
         window.alreadyReRouted = false;
+        
+        // --- PHASE 14: MODE COMPARISON LOGIC ---
+        const hour = new Date().getHours();
+        const isPeak = (hour >= 8 && hour < 11) || (hour >= 17 && hour < 20);
+        
+        const carTime = timeMin;
+        const bikeTime = Math.round(timeMin * 0.75); // Faster in traffic
+        const busTime = Math.round(timeMin * 1.5);   // Slower due to stops
+        const metroTime = Math.max(10, Math.round(parseFloat(distKm) * 2.5)); // 2.5 min per km average
+
+        const modes = [
+          { icon: '🚗', name: 'Car', time: carTime, status: isPeak ? 'Heavy Traffic' : 'Optimal' },
+          { icon: '🚲', name: 'Bike/Rapid', time: bikeTime, status: 'Lane Filtering' },
+          { icon: '🚌', name: 'Bus', time: busTime, status: 'Fixed Route' },
+          { icon: '🚇', name: 'Metro', time: metroTime, status: 'Traffic Free' }
+        ];
+
+        let best = modes[0];
+        if (isPeak) best = modes[3]; // Metro wins in peak
+        else if (carTime > 30) best = modes[1]; // Bike wins for long distance traffic
+        
+        const tbody = document.getElementById("mode-tbody");
+        tbody.innerHTML = modes.map(m => `
+          <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td style="padding:6px 0;">${m.icon} <b>${m.name}</b></td>
+            <td style="padding:6px 0;">${m.time} min</td>
+            <td style="padding:6px 0; color:${m.status.includes('Optimal') || m.status.includes('Free') ? '#22c55e':'rgba(255,255,255,0.4)'}">${m.status}</td>
+          </tr>
+        `).join('');
+
+        const badge = document.getElementById("best-mode-badge");
+        badge.style.display = "block";
+        badge.style.background = "rgba(34,197,94,0.1)";
+        badge.style.color = "#22c55e";
+        badge.style.border = "1px solid rgba(34,197,94,0.2)";
+        badge.innerHTML = `<i class="fa-solid fa-trophy"></i> Best Mode: <b>${best.icon} ${best.name}</b> (${best.time}m)`;
+
         startRouteGuard(); // Start monitoring the new route
       });
     }
@@ -448,10 +503,9 @@
           if(!res.junctions) return;
 
           // Find if any junction near destination or on route is HIGH
-          // For hackathon, we match the destination string to known junctions
           const highJunction = res.junctions.find(j => 
             j.congestion === 'HIGH' && 
-            (destStr.toLowerCase().includes(j.name.toLowerCase()) || Math.random() < 0.05) // Sim random logic for demo
+            (destStr.toLowerCase().includes(j.name.toLowerCase()) || Math.random() < 0.05)
           );
 
           if(highJunction && !window.alreadyReRouted) {
@@ -483,7 +537,6 @@
       if(!msg) return;
       document.getElementById("cr").innerHTML = "<i>AI is thinking...</i>";
       
-      // Feed context: current destination and mode
       const dest = document.getElementById("route-dest-search").value;
       const context = `(User is traveling to ${dest || 'unknown'} via ${currentMode})`;
       
@@ -495,7 +548,6 @@
       
       document.getElementById("cr").innerHTML = `<b>AI:</b> ${res.reply}`;
       
-      // Add suggestion chips
       if(dest) {
         document.getElementById("cr").innerHTML += `<div class="chips">
           <button onclick="chat('Suggest cafes near ${dest}')">☕ Cafes</button>
@@ -613,7 +665,7 @@
           recognition.stop();
           micBtn.style.color = "#8b949e";
           micBtn.style.borderColor = "rgba(255,255,255,0.1)";
-          fetchSuggestions(e.results[0][0].transcript); // Auto-fetch suggestions
+          fetchSuggestions(e.results[0][0].transcript); 
         };
 
         recognition.onerror = function(e) {
@@ -642,7 +694,6 @@
         recognition.onresult = function(e) {
           const originEl = document.getElementById('route-origin-str');
           originEl.value = e.results[0][0].transcript;
-          // Clear geocoded dataset so it forces a re-geocode on the new natural string
           delete originEl.dataset.lat;
           delete originEl.dataset.lng;
           
