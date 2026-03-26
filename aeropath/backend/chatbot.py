@@ -5,6 +5,11 @@ No external LLM needed — rule-based + context-aware responses.
 """
 import datetime
 import re
+import os
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 RESPONSES = {
     "traffic": [
@@ -90,6 +95,42 @@ def get_chatbot_response(user_input, junction_states, weather_data, last_ambulan
 
     if "safe" in msg:
         return {"reply": f"🛡️ Safety Check: Travel via {ctx_mode} to {ctx_dest or j_name} looks good. {mode_notes.get(ctx_mode, '')}", "type":"safety"}
+
+    # --- Live xAI / Grok Integration ---
+    xai_key = os.environ.get("XAI_API_KEY")
+    if xai_key:
+        system_prompt = f"""You are AeroPath AI, a concise and highly intelligent Urban Traffic & Routing Advisor.
+Context:
+User is traveling to: {ctx_dest or 'an unknown destination'} via {ctx_mode}.
+Current Hour: {hour}:00.
+Destination/Node ({j_name}): Traffic Level is {level}. Weather is {condition} ({temp}C) with {advice}.
+Ambulance AMB-01 Status: {'ACTIVE' if last_ambulance.get("active") else 'Standby'} at {last_ambulance.get('lat')}, {last_ambulance.get('lng')}.
+
+Answer the user's query intelligently based on this real-time data. Be extremely concise (1-3 sentences max). Recommend the best transport mode based on weather and traffic. Format your response cleanly."""
+        
+        try:
+            resp = requests.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {xai_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "grok-beta", 
+                    "messages": [
+                        {"role": "system", "content": system_prompt}, 
+                        {"role": "user", "content": msg}
+                    ]
+                },
+                timeout=8
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                reply = data["choices"][0]["message"]["content"]
+                reply = reply.replace("**", "<b>").replace("\n", "<br>") # Format for HTML presentation
+                return {"reply": f"🤖 <b>AeroPath AI:</b><br>{reply}", "type": "llm"}
+            else:
+                print("xAI HTTP Error:", resp.status_code, resp.text)
+        except Exception as e:
+            print("xAI Request Failed:", e)
+    # -----------------------------------
 
     # Intelligent Route & Context Synthesis
     if any(w in msg for w in ["route", "short", "best", "traffic", "peak", "time", "suggest"]):
