@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>AeroPath — Smart City Traffic Intelligence</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.85);
+      --border: rgba(255,255,255,0.08);
+      --accent: #3b82f6;
+      --accent-glow: rgba(59,130,246,0.3);
+      --green: #10b981;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --text: #f1f5f9;
+      --text-dim: #94a3b8;
+      --glass: rgba(255,255,255,0.04);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-primary); color: var(--text); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* ==================== ANIMATED LOGIN ==================== */
+    #login-overlay {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: linear-gradient(-45deg, #0a0e17, #1e1b4b, #0c4a6e, #064e3b, #0a0e17);
+        background-size: 500% 500%; animation: aurora 15s ease infinite;
+        z-index: 10000; display: flex; justify-content: center; align-items: center;
+        transition: opacity 1s ease-out, visibility 1s;
+    }
+    @keyframes aurora { 0%{background-position:0% 50%} 25%{background-position:50% 100%} 50%{background-position:100% 50%} 75%{background-position:50% 0%} 100%{background-position:0% 50%} }
+    
+    .login-box {
+        background: rgba(10, 14, 23, 0.7); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+        border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 30px 80px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.05);
+        padding: 55px 45px; border-radius: 24px; width: 430px; text-align: center;
+        animation: float 5s ease-in-out infinite;
+    }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+    .login-box h2 { font-size: 36px; font-weight: 800; background: linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 6px; }
+    .login-box .subtitle { color: var(--text-dim); margin-bottom: 40px; font-size: 14px; font-weight: 300; letter-spacing: 2px; text-transform: uppercase; }
+    .login-box input { width: 100%; padding: 16px 18px; margin-bottom: 16px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 12px; font-size: 14px; font-family: 'Inter'; transition: all 0.3s; }
+    .login-box input:focus { background: rgba(255,255,255,0.08); border-color: var(--accent); outline: none; box-shadow: 0 0 20px var(--accent-glow); }
+    .login-box input::placeholder { color: #475569; }
+    .login-box button { width: 100%; padding: 16px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); color: white; border: none; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: 600; font-family: 'Inter'; transition: all 0.3s; margin-top: 8px; }
+    .login-box button:hover { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(59,130,246,0.4); }
+
+    /* ==================== HEADER ==================== */
+    header { background: rgba(17,24,39,0.95); backdrop-filter: blur(20px); padding: 14px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; z-index: 10; }
+    header h1 { font-size: 20px; font-weight: 700; color: white; letter-spacing: 0.5px; }
+    header h1 span { background: linear-gradient(135deg, #3b82f6, #8b5cf6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    #live-badge { background: rgba(16,185,129,0.15); color: var(--green); padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid rgba(16,185,129,0.3); }
+    #weather-badge { display: flex; align-items: center; gap: 8px; background: var(--glass); padding: 5px 14px; border-radius: 20px; font-size: 12px; color: var(--text-dim); border: 1px solid var(--border); }
+
+    /* ==================== MAIN LAYOUT ==================== */
+    .main { display: flex; flex: 1; position: relative; }
+    #map { flex: 1; z-index: 1; }
+    .sidebar { width: 360px; background: rgba(17,24,39,0.97); backdrop-filter: blur(20px); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; z-index: 2; }
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+    .panel { padding: 22px; border-bottom: 1px solid var(--border); }
+    .panel h3 { font-size: 11px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 16px; letter-spacing: 1.5px; font-weight: 600; }
+    .stat-row { display: flex; gap: 10px; }
+    .stat { flex: 1; background: var(--glass); border-radius: 14px; padding: 16px; text-align: center; border: 1px solid var(--border); }
+    .stat .val { font-size: 26px; font-weight: 700; background: linear-gradient(135deg, #3b82f6, #06b6d4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .stat .lbl { font-size: 11px; color: var(--text-dim); margin-top: 4px; font-weight: 500; }
+
+    /* Weather Panel */
+    .weather-panel { display: flex; gap: 12px; align-items: center; padding: 16px; background: var(--glass); border-radius: 14px; border: 1px solid var(--border); margin-bottom: 10px; }
+    .weather-panel .w-icon { font-size: 36px; }
+    .weather-panel .w-info { flex: 1; }
+    .weather-panel .w-temp { font-size: 24px; font-weight: 700; color: white; }
+    .weather-panel .w-desc { font-size: 12px; color: var(--text-dim); text-transform: capitalize; }
+    .weather-panel .w-details { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+    /* Junction Cards */
+    .junction-card { background: var(--glass); border-radius: 12px; padding: 14px; margin-bottom: 10px; border-left: 4px solid #334155; border-right: 1px solid var(--border); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); transition: all 0.25s; }
+    .junction-card:hover { background: rgba(255,255,255,0.06); transform: translateX(3px); }
+    .junction-card.HIGH { border-left-color: var(--red); }
+    .junction-card.MEDIUM { border-left-color: var(--yellow); }
+    .junction-card.LOW { border-left-color: var(--green); }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+    .badge.HIGH { background: rgba(239,68,68,0.12); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+    .badge.MEDIUM { background: rgba(245,158,11,0.12); color: var(--yellow); border: 1px solid rgba(245,158,11,0.3); }
+    .badge.LOW { background: rgba(16,185,129,0.12); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+
+    /* Route Form */
+    .route-form input { width: 100%; padding: 13px 16px; margin-bottom: 12px; background: var(--glass); border: 1px solid var(--border); color: var(--text); border-radius: 10px; font-size: 14px; font-family: 'Inter'; transition: all 0.3s; }
+    .route-form input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 15px var(--accent-glow); background: rgba(255,255,255,0.06); }
+    .route-form button { width: 100%; padding: 14px; background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 14px; font-weight: 600; font-family: 'Inter'; transition: all 0.25s; }
+    .route-form button:hover { transform: translateY(-2px); box-shadow: 0 8px 25px var(--accent-glow); }
+
+    #search-suggestions { position: absolute; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px; max-height: 200px; overflow-y: auto; z-index: 100; display: none; width: calc(100% - 44px); box-shadow: 0 15px 40px rgba(0,0,0,0.6); }
+    #search-suggestions div { padding: 12px 16px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border); color: var(--text-dim); transition: all 0.2s; }
+    #search-suggestions div:hover { background: rgba(59,130,246,0.1); color: var(--accent); }
+
+    .traffic-car { font-size: 18px; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8)); }
+
+    #emergency-banner { display: none; position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: linear-gradient(135deg, #10b981, #059669); color: white; padding: 16px 32px; font-size: 16px; font-weight: 600; border-radius: 14px; z-index: 9999; box-shadow: 0 10px 40px rgba(16,185,129,0.4); text-align: center; animation: slideDown 0.5s cubic-bezier(0.16,1,0.3,1); font-family: 'Inter'; }
+    #emergency-banner.alert-red { background: linear-gradient(135deg, #ef4444, #b91c1c); box-shadow: 0 10px 40px rgba(239,68,68,0.5); }
+    @keyframes slideDown { from { top: -100px; opacity: 0; } to { top: 20px; opacity: 1; } }
+  </style>
+</head>
+<body>
+
+  <div id="login-overlay">
+      <div class="login-box">
+          <h2>🛣 AeroPath</h2>
+          <div class="subtitle">AI Traffic Intelligence</div>
+          <input type="text" placeholder="Enter your name" value="Guest Driver">
+          <input type="password" placeholder="Passcode (Optional)" value="*********">
+          <button onclick="performLogin()">Launch Dashboard →</button>
+      </div>
+  </div>
+
+  <header>
+    <h1>🛣 Aero<span>Path</span></h1>
+    <div class="header-right">
+      <div id="weather-badge">🌤️ <span id="weather-text">Loading weather...</span></div>
+      <div id="live-badge">● LIVE</div>
+      <span id="clock" style="font-size:13px;color:var(--text-dim);font-weight:500;"></span>
+    </div>
+  </header>
+
+  <div class="main">
+    <div id="emergency-banner"></div>
+    <div id="map"></div>
+
+    <div class="sidebar">
+      <!-- Weather -->
+      <div class="panel">
+        <h3>Current Weather</h3>
+        <div class="weather-panel" id="weather-panel">
+          <div class="w-icon" id="w-icon">🌤️</div>
+          <div class="w-info">
+            <div class="w-temp" id="w-temp">--°C</div>
+            <div class="w-desc" id="w-desc">Loading...</div>
+            <div class="w-details" id="w-details">Humidity: -- | Wind: --</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="panel">
+        <h3>Traffic Overview</h3>
+        <div class="stat-row">
+          <div class="stat"><div class="val">18<span style="font-size:14px"> min</span></div><div class="lbl">Avg Saved</div></div>
+          <div class="stat"><div class="val">5</div><div class="lbl">Zones</div></div>
+          <div class="stat"><div class="val">92<span style="font-size:14px">%</span></div><div class="lbl">AI Accuracy</div></div>
+        </div>
+      </div>
+
+      <!-- Route Planner -->
+      <div class="panel" style="position:relative;">
+        <h3 style="color:var(--accent);">📍 Route Planner</h3>
+        <div class="route-form">
+          <div style="padding:13px 16px; background:rgba(59,130,246,0.08); color:var(--accent); border:1px solid rgba(59,130,246,0.25); border-radius:10px; font-weight:600; margin-bottom:14px; font-size:13px;">
+              📍 <span id="start-label">Detecting location...</span>
+          </div>
+          <input type="text" id="dest-search" placeholder="🔍 Search destination..." oninput="searchPlace(this.value)" autocomplete="off">
+          <div id="search-suggestions"></div>
+          <button onclick="findRoute()">🗺️ Find Shortest Route</button>
+          <div id="route-result" style="margin-top:14px; padding:14px; border-radius:12px; background:var(--glass); border:1px solid var(--border); display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Junction Status -->
+      <div class="panel">
+        <h3>Live Junction Status</h3>
+        <div id="junction-list"><div style="text-align:center; padding:20px; color:var(--text-dim)">Syncing live data...</div></div>
+      </div>
+
+      <!-- Demo -->
+      <div class="panel" style="display:none;" id="ambulance-panel">
+        <h3>Demo Mode</h3>
+        <button onclick="runDemo('b')" style="width:100%;padding:12px;background:rgba(239,68,68,0.08);color:var(--red);border:1px solid rgba(239,68,68,0.3);border-radius:10px;cursor:pointer;font-weight:600;font-family:'Inter';font-size:13px;">
+          🚨 Simulate Emergency Detour
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const API = "";
+
+    function performLogin() {
+        const o = document.getElementById("login-overlay");
+        o.style.opacity = "0"; setTimeout(() => o.style.visibility = "hidden", 1000);
+        showBanner("Welcome! GPS location detected. Search any destination.", false);
+        setTimeout(() => document.getElementById("ambulance-panel").style.display = "block", 3000);
+    }
+
+    // ==================== MAP (Google-style tiles) ====================
+    const map = L.map("map", { zoomControl: false }).setView([12.96, 77.60], 14);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // Use Google Maps satellite/road hybrid tiles
+    L.tileLayer("https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+        maxZoom: 20,
+        attribution: "Map data © Google"
+    }).addTo(map);
+
+    const markers = {};
+    let userLat = 12.9716, userLng = 77.5946;
+
+    // Auto-detect GPS
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+            userLat = pos.coords.latitude; userLng = pos.coords.longitude;
+            userMarker.setLatLng([userLat, userLng]); userCircle.setLatLng([userLat, userLng]);
+            map.setView([userLat, userLng], 14);
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${userLat}&lon=${userLng}`)
+                .then(r => r.json()).then(d => { document.getElementById("start-label").textContent = d.display_name ? d.display_name.split(",").slice(0,3).join(", ") : "Your Location"; });
+        }, () => { document.getElementById("start-label").textContent = "MG Road, Bengaluru"; });
+    } else { document.getElementById("start-label").textContent = "MG Road, Bengaluru"; }
+
+    const userMarker = L.circleMarker([userLat, userLng], { radius: 9, color: '#fff', fillColor: '#4285F4', fillOpacity: 1, weight: 3 }).addTo(map).bindPopup("<b>📍 Your Location</b>");
+    const userCircle = L.circle([userLat, userLng], { radius: 150, color: '#4285F4', fillColor: '#4285F4', fillOpacity: 0.07, weight: 1 }).addTo(map);
+
+    let destMarker = null, routeLine = null, routeShadow = null, destLat = null, destLng = null, destName = "";
+
+    // ==================== WEATHER (OpenMeteo — free, no API key) ====================
+    function loadWeather() {
+        fetch(`https://api.open-meteo.com/v1/forecast?latitude=${userLat}&longitude=${userLng}&current_weather=true&hourly=relative_humidity_2m`)
+            .then(r => r.json()).then(d => {
+                const w = d.current_weather;
+                const temp = Math.round(w.temperature);
+                const windSpeed = w.windspeed;
+                const code = w.weathercode;
+                let icon = "☀️", desc = "Clear Sky";
+                if (code >= 1 && code <= 3) { icon = "⛅"; desc = "Partly Cloudy"; }
+                else if (code >= 45 && code <= 48) { icon = "🌫️"; desc = "Foggy"; }
+                else if (code >= 51 && code <= 67) { icon = "🌧️"; desc = "Rainy"; }
+                else if (code >= 71 && code <= 77) { icon = "🌨️"; desc = "Snowy"; }
+                else if (code >= 80 && code <= 82) { icon = "⛈️"; desc = "Heavy Rain"; }
+                else if (code >= 95) { icon = "⛈️"; desc = "Thunderstorm"; }
+
+                const humidity = d.hourly && d.hourly.relative_humidity_2m ? d.hourly.relative_humidity_2m[0] : "--";
+                document.getElementById("w-icon").textContent = icon;
+                document.getElementById("w-temp").textContent = temp + "°C";
+                document.getElementById("w-desc").textContent = desc;
+                document.getElementById("w-details").textContent = `Humidity: ${humidity}% | Wind: ${windSpeed} km/h`;
+                document.getElementById("weather-text").textContent = `${icon} ${temp}°C ${desc}`;
+            }).catch(() => {
+                document.getElementById("w-desc").textContent = "Unavailable";
+                document.getElementById("weather-text").textContent = "Weather unavailable";
+            });
+    }
+    loadWeather(); setInterval(loadWeather, 300000); // Refresh every 5 min
+
+    // ==================== PLACE SEARCH ====================
+    let searchTimeout = null;
+    function searchPlace(query) {
+        clearTimeout(searchTimeout);
+        const box = document.getElementById("search-suggestions");
+        if (query.length < 3) { box.style.display = "none"; return; }
+        searchTimeout = setTimeout(() => {
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=in`)
+                .then(r => r.json()).then(results => {
+                    if (!results.length) { box.style.display = "none"; return; }
+                    box.innerHTML = "";
+                    results.forEach(r => {
+                        const div = document.createElement("div");
+                        div.textContent = r.display_name.split(",").slice(0,4).join(", ");
+                        div.onclick = () => selectDestination(parseFloat(r.lat), parseFloat(r.lon), div.textContent);
+                        box.appendChild(div);
+                    });
+                    box.style.display = "block";
+                });
+        }, 400);
+    }
+
+    function selectDestination(lat, lng, name) {
+        destLat = lat; destLng = lng; destName = name;
+        document.getElementById("dest-search").value = name;
+        document.getElementById("search-suggestions").style.display = "none";
+        if (destMarker) map.removeLayer(destMarker);
+        destMarker = L.marker([lat, lng], { icon: L.divIcon({ html: "<div style='font-size:28px;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6));'>📍</div>", className: "", iconSize: [28, 28] }), zIndexOffset: 900 }).addTo(map).bindPopup(`<b>Destination</b><br>${name}`).openPopup();
+    }
+
+    // ==================== ROUTE FINDING (OSRM) ====================
+    function findRoute() {
+        if (destLat === null) { showBanner("Search and select a destination first!", true); return; }
+        const url = `https://router.project-osrm.org/route/v1/driving/${userLng},${userLat};${destLng},${destLat}?overview=full&geometries=geojson`;
+        fetch(url).then(r => r.json()).then(data => {
+            if (!data.routes || !data.routes.length) { showBanner("No route found.", true); return; }
+            const route = data.routes[0];
+            const distKm = (route.distance / 1000).toFixed(1);
+            const durMin = Math.round(route.duration / 60);
+            const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+
+            if (routeLine) map.removeLayer(routeLine);
+            if (routeShadow) map.removeLayer(routeShadow);
+
+            routeShadow = L.polyline(coords, { color: '#1e40af', weight: 12, opacity: 0.25, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+            routeLine = L.polyline(coords, { color: '#4285F4', weight: 6, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+            routeShadow.bringToBack();
+            map.fitBounds(routeLine.getBounds(), { padding: [60, 60] });
+
+            document.getElementById("route-result").style.display = "block";
+            document.getElementById("route-result").innerHTML = `
+                <div style="color:var(--accent);font-weight:700;margin-bottom:12px;font-size:15px;">🗺️ Route Found</div>
+                <div style="display:flex;gap:10px;margin-bottom:12px;">
+                    <div style="flex:1;padding:12px;background:var(--bg-primary);border-radius:10px;text-align:center;border:1px solid var(--border);">
+                        <div style="font-size:24px;font-weight:700;color:#4285F4;">${distKm} km</div>
+                        <div style="font-size:11px;color:var(--text-dim);margin-top:3px;">Distance</div>
+                    </div>
+                    <div style="flex:1;padding:12px;background:var(--bg-primary);border-radius:10px;text-align:center;border:1px solid var(--border);">
+                        <div style="font-size:24px;font-weight:700;color:var(--green);">${durMin} min</div>
+                        <div style="font-size:11px;color:var(--text-dim);margin-top:3px;">Est. Time</div>
+                    </div>
+                </div>
+                <div style="font-size:12px;color:var(--text-dim);line-height:1.8;">
+                    📍 ${document.getElementById("start-label").textContent}<br>⬇️<br>🏁 ${destName}
+                </div>`;
+            showBanner(`Route: ${distKm} km — approx ${durMin} minutes`, false);
+        }).catch(() => showBanner("Routing error. Check internet.", true));
+    }
+
+    // ==================== TRAFFIC ====================
+    let trafficCars = [], trafficInit = false;
+    function initTraffic() {
+        if (trafficInit) return;
+        const jk = Object.keys(markers); if (!jk.length) return;
+        trafficInit = true;
+        const emojis = ["🚗","🚙","🚕","🚚","🛵"];
+        for (let i = 0; i < 35; i++) {
+            let jid = jk[Math.floor(Math.random()*jk.length)];
+            let ll = markers[jid].getLatLng();
+            let icon = L.divIcon({html:`<div class="traffic-car">${emojis[Math.floor(Math.random()*emojis.length)]}</div>`,className:"",iconSize:[20,20]});
+            trafficCars.push(L.marker([ll.lat+(Math.random()-0.5)*0.02, ll.lng+(Math.random()-0.5)*0.02],{icon,zIndexOffset:400}).addTo(map));
+        }
+        setInterval(()=>{trafficCars.forEach(c=>{let l=c.getLatLng();c.setLatLng([l.lat+(Math.random()-0.5)*0.0004,l.lng+(Math.random()-0.5)*0.0004]);});},1200);
+    }
+
+    // ==================== CLOCK ====================
+    setInterval(()=>{document.getElementById("clock").textContent=new Date().toLocaleTimeString();},1000);
+
+    // ==================== HELPERS ====================
+    const colorMap = {HIGH:"#ef4444",MEDIUM:"#f59e0b",LOW:"#10b981",GREEN_WAVE_ACTIVE:"#3b82f6"};
+    function getColor(j){return j.status==="GREEN_WAVE_ACTIVE"?colorMap.GREEN_WAVE_ACTIVE:(colorMap[j.congestion]||"#3b82f6");}
+    let lastAlertId=null, bannerTO;
+    function showBanner(msg,isRed=false){
+        const b=document.getElementById("emergency-banner");
+        b.innerHTML=isRed?("🚨 "+msg):("✅ "+msg);
+        isRed?b.classList.add("alert-red"):b.classList.remove("alert-red");
+        b.style.display="block"; clearTimeout(bannerTO); bannerTO=setTimeout(()=>{b.style.display="none";},9000);
+    }
+
+    // ==================== DASHBOARD ====================
+    function updateDashboard(){
+      fetch(API+"/api/dashboard/data").then(r=>r.json()).then(data=>{
+        if(!data||!data.junctions) return;
+        let html="";
+        data.junctions.forEach(j=>{
+            const color=getColor(j);
+            const ds=j.status==="GREEN_WAVE_ACTIVE"?"GREEN_WAVE_ACTIVE":j.congestion;
+            const conf=Math.round((j.confidence||0.5)*100);
+            if(markers[j.id]) markers[j.id].setStyle({color,fillColor:color});
+            else markers[j.id]=L.circleMarker([j.lat,j.lng],{radius:16,color:'#fff',fillColor:color,fillOpacity:0.85,weight:2}).addTo(map).bindPopup(`<div style="font-family:Inter;text-align:center"><b>${j.name}</b><br>Traffic: <b style="color:${color}">${ds}</b><br>Confidence: ${conf}%</div>`);
+            html+=`<div class="junction-card ${ds}"><div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:13px">${j.name}</b><span class="badge ${ds}">${ds}</span></div></div>`;
+        });
+        document.getElementById("junction-list").innerHTML=html;
+        if(data.alerts&&data.alerts.length>0){let a=data.alerts[0];if(lastAlertId!==a.id&&a.message.includes("divert")){lastAlertId=a.id;showBanner(a.message,true);}else if(!lastAlertId)lastAlertId=a.id;}
+        initTraffic();
+      }).catch(e=>{console.error(e);document.getElementById("junction-list").innerHTML=`<div style='text-align:center;padding:20px;color:var(--red);border:1px dashed var(--red);border-radius:10px;'>⚠️ Server offline. Run <b>python app.py</b></div>`;});
+    }
+
+    // ==================== AMBULANCE DEMO ====================
+    const ambMarker=L.marker([12.96,77.58],{icon:L.divIcon({html:"<div style='font-size:34px;filter:drop-shadow(0 0 10px red);'>🚑</div>",className:"",iconSize:[40,40]}),zIndexOffset:1000,opacity:0}).addTo(map);
+    let ambPath=[[12.940,77.550],[12.950,77.560],[12.960,77.570],[12.965,77.580],[12.968,77.590],[12.971,77.594]],ps=0;
+    function runDemo(s){
+      if(s==='b'){ambMarker.setOpacity(1);ps=0;
+        const mv=setInterval(()=>{if(ps>=ambPath.length){clearInterval(mv);ambMarker.setOpacity(0);return;}
+        const[lat,lng]=ambPath[ps];ambMarker.setLatLng([lat,lng]);map.panTo([lat,lng]);
+        fetch(API+"/api/ambulance/update",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({vehicle_id:"AMB-01",lat,lng})}).then(()=>updateDashboard());ps++;},1500);}
+    }
+
+    updateDashboard(); setInterval(updateDashboard,5000);
+  </script>
+</body>
+</html>
